@@ -133,6 +133,7 @@ def test_author_defaults_to_github_name_or_username_and_noreply_address(repos, i
 
 
 @pytest.mark.req("SP-NOREN-010")
+@pytest.mark.req("SP-NOREN-033")
 def test_unavailable_gh_requires_author_and_configured_identity_does_not_use_gh(repos, invoke, result, gh_boundary):
     """Without gh an absent author prevents publication, and explicit settings then permit it without gh."""
     config = repos.configure()
@@ -141,12 +142,13 @@ def test_unavailable_gh_requires_author_and_configured_identity_does_not_use_gh(
     repos.commit("v1")
     code, failed, err = publish(invoke, result)
     assert code != 0 and "author" in err
-    assert failed["commit"] is None and repos.refs() == b""
+    assert failed["author"] is None and failed["commit"] is None and repos.refs() == b""
     calls_before = list(gh_boundary["calls"])
     repos.configure()
     repos.commit("v2")
     code, sent, err = publish(invoke, result, tag="v2")
     assert code == 0 and err == "" and sent["pushed"] is True
+    assert sent["author"] == {"name": "Release Bot", "email": "release@example.invalid"}
     assert gh_boundary["calls"] == calls_before
 
 
@@ -164,6 +166,7 @@ def test_failed_push_reports_created_commit_and_previous_main(repos, invoke, res
     code, failed, err = publish(invoke, result, initial=False)
     assert code != 0 and "Publication rejected" in err
     assert failed["destination_main_before"] == before
+    assert failed["author"] == {"name": "Release Bot", "email": "release@example.invalid"}
     assert re.fullmatch(r"[0-9a-f]{40}", failed["commit"])
     assert failed["pushed"] is False
     assert repos.refs() == refs_before

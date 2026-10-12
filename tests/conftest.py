@@ -123,11 +123,14 @@ def result():
         assert len(documents) == 1
         data = documents[0]
         assert set(data) == {
-            "tag", "source_commit", "destination", "files", "destination_main_before", "commit", "pushed",
+            "tag", "source_commit", "destination", "author", "files", "destination_main_before", "commit", "pushed",
         }
         assert data["tag"] is None or isinstance(data["tag"], str)
         assert data["source_commit"] is None or isinstance(data["source_commit"], str)
         assert isinstance(data["destination"], str)
+        if data["author"] is not None:
+            assert set(data["author"]) == {"name", "email"}
+            assert all(isinstance(value, str) and value for value in data["author"].values())
         assert isinstance(data["files"], list)
         assert all(isinstance(path, str) for path in data["files"])
         assert data["destination_main_before"] is None or isinstance(data["destination_main_before"], str)

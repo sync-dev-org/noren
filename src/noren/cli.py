@@ -5,6 +5,7 @@ import sys
 
 import yaml
 
+from noren import __version__
 from noren.git import NorenError
 from noren.publishing import publish
 from noren.setup import initialize
@@ -37,11 +38,15 @@ def parser() -> Parser:
             "Use init to create settings and publish to check a source tag or commit.\n"
             "Publish defaults to dry-run and prints one YAML document.\n"
             "Commands exit with 0 on success and nonzero on errors, reported to stderr.\n\n"
+            "Notes:\n"
+            "  - Review files and author in dry-run before adding --push to send them.\n"
+            "  - Commit settings and the word list before selecting a source tag or commit.\n\n"
             "Examples:\n  noren init\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial\n\n"
             "Related:\n  noren init --help\n  noren publish --help"
         ),
     )
+    command.add_argument("--version", action="version", version=__version__, help="Print the installed version and exit.")
     commands = command.add_subparsers(dest="command", title="Commands")
     commands.add_parser(
         "init", allow_abbrev=False,
@@ -52,6 +57,10 @@ def parser() -> Parser:
             "Set destination, include, exclude, and word-list; configure forbidden words.\n"
             "Existing templates are preserved. No arguments or interactive input are needed.\n"
             "Print setup instructions to stdout; exit 0 on success, nonzero on errors to stderr.\n\n"
+            "Notes:\n"
+            "  - Keep noren.yaml and the word list in exclude to avoid sending private settings.\n"
+            "  - Keep the origin URL and repository name in the forbidden words; add private\n"
+            "    identifiers, edit the settings, and commit both files before publishing.\n\n"
             "Examples:\n  noren init\n\n"
             "Related:\n  Commit the settings, then run noren publish --help to choose a tag or commit ID."
         ),
@@ -67,12 +76,27 @@ def parser() -> Parser:
             "Default to dry-run. With --push, extend destination main without force or source history.\n"
             "With --tag, update main and the same tag together in one atomic push.\n"
             "With --commit, update only main and create no tag; names such as HEAD are rejected.\n"
-            "Print one YAML document with tag, source_commit, destination, files,\n"
+            "Print one YAML document with tag, source_commit, destination, author, files,\n"
             "destination_main_before, commit, and pushed, on success and failure.\n"
             "tag is null with --commit. source_commit is the full source commit ID, or null\n"
             "if unresolved. Dry-run has commit: null. pushed confirms all requested updates.\n"
+            "author has name and email for the destination commit's author and committer,\n"
+            "or null if unresolved.\n"
             "destination_main_before is an empty string when unread and null when main is absent.\n"
             "Exit 0 on success, nonzero on errors with reasons on stderr.\n\n"
+            "Notes:\n"
+            "  - Settings and the word list come from the selected source commit, not the working tree.\n"
+            "    Commit corrections, then select a tag or commit containing them.\n"
+            "  - noren.yaml and the word list are committed to the source repository and may enter packages.\n"
+            "    Build from the destination repository or exclude both files in your build backend.\n"
+            "  - Send with noren before publishing to a package registry so forbidden-word checks\n"
+            "    run before irreversible publication.\n"
+            "  - Published tests containing literal private names fail forbidden-word checks.\n"
+            "    Read those names from the excluded word-list file instead.\n"
+            "  - Source Git hooks such as pre-push do not run; run additional checks before sending.\n"
+            "  - Destination tags are lightweight and point directly to the destination commit.\n"
+            "  - --commit creates no tag. If a push result is uncertain, check destination main\n"
+            "    before you retry.\n\n"
             "Examples:\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial --push\n"
@@ -95,7 +119,7 @@ def parser() -> Parser:
 def main(argv=None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     output = {
-        "tag": "", "source_commit": None, "destination": "", "files": [],
+        "tag": "", "source_commit": None, "destination": "", "author": None, "files": [],
         "destination_main_before": "", "commit": None, "pushed": False,
     }
     publishing = bool(arguments and arguments[0] == "publish")

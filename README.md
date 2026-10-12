@@ -25,6 +25,8 @@ uvx noren --help
 
 The examples below use `uv run noren`. If you chose uvx, replace that prefix with `uvx noren`. If noren is already available in your environment, you can use `noren` directly. `noren init` and `noren publish` work without interactive input.
 
+To check the installed version, run `uv run noren --version`. It prints the version derived from Git tags on one line and exits with 0; it also works outside a Git repository.
+
 ## Initial setup
 
 The source repository must have an `origin` remote. Create a separate destination repository on GitHub and make sure your usual Git authentication can read it and push to it. noren uses `https://github.com/OWNER/REPO.git`, with your existing Git configuration.
@@ -95,6 +97,19 @@ private@example.invalid
 
 The list must contain at least one nonblank line. Every nonblank line is an entry, including a line beginning with `#`; the word list has no comment syntax. noren compares substrings after Unicode NFKC normalization and case folding, so case and full-width forms also match. Bytes that cannot be decoded as UTF-8 are replaced for the inspection. The files are sent with their original bytes.
 
+If published tests check private names, writing those names as literals in the tests can trigger forbidden-word rejection. Read the names from the excluded word-list file instead. For example, a test file directly under `tests/` can load the list as follows; run checks that need this excluded file in the source repository:
+
+```python
+from pathlib import Path
+
+word_list = Path(__file__).resolve().parents[1] / "noren-words.txt"
+forbidden_words = [
+    line.strip()
+    for line in word_list.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+```
+
 ### Commit the settings before selecting a tag or commit ID
 
 noren reads the selected files, `noren.yaml`, and the word list from the commit named by `--tag` or `--commit`. Changes in the working directory or later commits do not affect that commit's check or publication.
@@ -116,6 +131,8 @@ For changes that do not increase the version, such as correcting a README, use `
 
 If you correct settings or file contents after a failed check, commit the correction and choose a tag or commit ID that contains it before checking again.
 
+Tags and commits created before you added `noren.yaml` cannot be sent, because noren reads the settings from the selected commit. For the first publication after adopting noren, create a new tag, or choose a commit ID, that contains the committed settings.
+
 ### Keep the settings out of packages you build
 
 `noren.yaml` and the word list are committed to the source repository, and the word list names the private identifiers you want to keep in. noren never sends them unless you include them, but other tools that package the source repository can. For example, a Python sdist built from the source checkout includes every tracked file by default, so publishing it to PyPI would publish the word list.
@@ -127,7 +144,9 @@ Build packages from the destination repository, which holds only the selected fi
 exclude = ["/noren.yaml", "/noren-words.txt"]
 ```
 
-Check the contents of built packages before publishing them.
+If the packaging tool selects files with an allow list, such as hatchling's `only-include`, the two settings files stay out unless the list names them, and adding them to `exclude` has no effect. In either case, check the files in built packages before publishing them.
+
+Sending with noren before publishing to a package registry lets the forbidden-word check run before that irreversible publication.
 
 ## Check before sending
 
@@ -143,6 +162,9 @@ For a tag containing only `README.md` and `src/app.py` among the included files,
 tag: v1.0.0
 source_commit: 0123456789abcdef0123456789abcdef01234567
 destination: OWNER/public-project
+author:
+  name: Release Bot
+  email: release@example.invalid
 files:
 - README.md
 - src/app.py
@@ -151,7 +173,7 @@ commit: null
 pushed: false
 ```
 
-Check `source_commit`, `destination`, and every path in `files`. Dry-run creates no destination commit and updates no destination branches or tags, but it reads the destination's references, so Git access is needed. It also resolves the author identity. A successful dry-run does not guarantee permission to push.
+Check `source_commit`, `destination`, `author`, and every path in `files`. The printed `author.name` and `author.email` will be used for both the destination commit's author and committer. Dry-run creates no destination commit and updates no destination branches or tags, but it reads the destination's references, so Git access is needed. A successful dry-run does not guarantee permission to push.
 
 The command exits with 0 if the check succeeds. It exits with a nonzero code and writes the reason to stderr if, for example, a file is in neither list, selected contents contain a forbidden word, a required setting or a nonempty word list is missing, or the destination cannot be read. Unclassified-file errors list paths; forbidden-word errors identify the file and line. Selected submodules must be excluded; symlinks are inspected using their link target text and sent as symlinks.
 
@@ -165,7 +187,9 @@ Add `--push` to the command you checked:
 uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
-The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only destination `main` and creates no tag.
+The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag is lightweight (not annotated) and points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only destination `main` and creates no tag.
+
+noren pushes with `--no-verify`, so Git hooks in the source repository, such as `pre-push`, do not run. Run any additional checks, such as secret scanning, before you send.
 
 For a later source tag, omit `--initial`:
 
@@ -198,6 +222,7 @@ uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren
 | `tag` | The requested source tag name; `null` with `--commit`, or an empty string if no selector is available. |
 | `source_commit` | The full ID of the source commit read for publication; `null` if the command stopped before resolving it. |
 | `destination` | The destination `OWNER/REPO`; an empty string if unavailable. |
+| `author` | The resolved `name` and `email` used for both the destination commit's author and committer; `null` if the command stopped before resolving the identity. |
 | `files` | The selected file paths as a YAML list, possibly empty. This list alone does not indicate a successful check or push. |
 | `destination_main_before` | The destination's `main` commit ID read before sending. `null` means the destination was read and `main` was absent; `''` means that value could not be obtained. |
 | `commit` | The created destination commit ID. `null` for dry-run or a failure before creating a commit. |
@@ -230,3 +255,5 @@ uv run noren publish --help
 ```
 
 Command help is in English. This README covers setup, checks, sending, and verification. Your project's version changes, builds, and publication to package registries belong to its own release instructions.
+
+The commands and their YAML output are noren's stable interface. The Python modules inside the noren package are internal and may change between versions. Do not import them from your project's tests; to check which files noren selects, use the `files` list from a dry-run.

@@ -18,7 +18,9 @@ def test_default_dry_run_reports_files_without_changing_either_repository(repos,
     assert code == 0 and err == ""
     assert result(out) == {
         "tag": "v1", "source_commit": source_commit,
-        "destination": "example/public", "files": ["public/readme.txt"],
+        "destination": "example/public",
+        "author": {"name": "Release Bot", "email": "release@example.invalid"},
+        "files": ["public/readme.txt"],
         "destination_main_before": None, "commit": None, "pushed": False,
     }
     assert repos.refs() == b""
@@ -193,6 +195,7 @@ def test_check_uses_tagged_files_settings_and_word_list_instead_of_head_or_workt
 
 @pytest.mark.req("SP-NOREN-009")
 @pytest.mark.req("SP-NOREN-032")
+@pytest.mark.req("SP-NOREN-033")
 def test_unreadable_destination_stops_without_creating_a_commit(repos, invoke, result, monkeypatch, tmp_path):
     """Failure to read destination main stops publication without a separate access check."""
     repos.commit("v1")
@@ -202,6 +205,7 @@ def test_unreadable_destination_stops_without_creating_a_commit(repos, invoke, r
     data = result(out)
     assert data["files"] == ["public/readme.txt"]
     assert data["destination"] == "example/public"
+    assert data["author"] == {"name": "Release Bot", "email": "release@example.invalid"}
     assert data["commit"] is None
     assert repos.refs() == b""
 
@@ -221,7 +225,7 @@ def test_destination_cannot_be_the_source_repository(repos, invoke, result, orig
 @pytest.mark.req("SP-NOREN-033")
 @pytest.mark.parametrize("configuration", [None, "broken: [", "- list", "destination: example/public\ninclude: [list]\nexclude: ''\nword-list: noren-words.txt\n"])
 def test_missing_invalid_or_wrongly_typed_config_stops_with_a_complete_result(repos, invoke, result, configuration):
-    """Invalid tagged settings stop cleanly and preserve the seven public output fields and their types."""
+    """Invalid tagged settings stop cleanly and preserve the eight public output fields with an unresolved author."""
     if configuration is None:
         (repos.source / "noren.yaml").unlink()
     else:
@@ -229,5 +233,6 @@ def test_missing_invalid_or_wrongly_typed_config_stops_with_a_complete_result(re
     repos.commit("v1")
     code, out, err = invoke("publish", "--tag", "v1", "--message", "Release", "--initial", "--push")
     assert code != 0 and "noren.yaml" in err
-    assert result(out)["files"] == []
+    data = result(out)
+    assert data["files"] == [] and data["author"] is None
     assert repos.refs() == b""

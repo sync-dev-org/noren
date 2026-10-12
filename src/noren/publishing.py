@@ -156,7 +156,7 @@ def reject_source_destination(repository, config, url):
         raise NorenError("The destination is the source repository; no files will be sent.")
 
 
-def author(config):
+def author(repository, config):
     if "author" in config:
         identity = config["author"]
         if not isinstance(identity, dict):
@@ -176,6 +176,16 @@ def author(config):
         except (OSError, ValueError, KeyError, TypeError, NorenError) as error:
             raise NorenError("Configure author.name and author.email in noren.yaml; gh is unavailable.") from error
     if not all(isinstance(value, str) and value.strip() and not any(char in value for char in "\r\n<>") for value in (name, email)):
+        raise NorenError("noren.yaml: author needs valid nonempty name and email strings.")
+    environment = os.environ.copy()
+    environment.update(GIT_AUTHOR_NAME=name, GIT_AUTHOR_EMAIL=email)
+    try:
+        identity = repository.git("var", "GIT_AUTHOR_IDENT", env=environment).decode("utf-8")
+    except NorenError as error:
+        raise NorenError(f"noren.yaml: author is invalid: {error}") from error
+    name, email_and_date = identity.split(" <", 1)
+    email = email_and_date.split("> ", 1)[0]
+    if not name or not email:
         raise NorenError("noren.yaml: author needs valid nonempty name and email strings.")
     return name, email
 
@@ -262,7 +272,8 @@ def publish(options, output):
     blobs = inspect_content(repository, entries, selected, config)
     url = f"https://github.com/{config['destination']}.git"
     reject_source_destination(repository, config, url)
-    identity = author(config)
+    identity = author(repository, config)
+    output["author"] = {"name": identity[0], "email": identity[1]}
     remote_refs = {}
     refs = ["refs/heads/main"]
     if options.tag is not None:

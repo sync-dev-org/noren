@@ -25,6 +25,8 @@ uvx noren --help
 
 以下の例は `uv run noren` を使います。uvx を選んだ場合は、その部分を `uvx noren` に置き換えてください。すでに実行環境から noren を起動できる場合は、`noren` を直接使えます。`noren init` と `noren publish` は対話の入力を求めません。
 
+入っている version は `uv run noren --version` で確認できます。Git の tag から導いた version を一行で出し、終了コード 0 で終わります。Git リポジトリの外でも実行できます。
+
 ## 初期セットアップ
 
 元のリポジトリには remote の `origin` が必要です。GitHub に別の送り先リポジトリを作り、普段使っている Git の認証で読み取りと push ができるようにしてください。noren は、既存の Git の設定で `https://github.com/OWNER/REPO.git` にアクセスします。
@@ -95,6 +97,19 @@ private@example.invalid
 
 一覧には空白でない行が一つ以上必要です。`#` で始まる行も含め、空白でない行はすべて禁止語になります。禁止語の一覧には comment の書式はありません。noren は Unicode の NFKC 正規化と case folding の後に部分一致で探すため、大文字と小文字の違い、全角の表記でも当たります。UTF-8 として読めない byte は、検査の際に置き換え文字として扱います。送るファイルの byte は元のままです。
 
+公開する test が private の名前を確かめる場合、名前を test に文字列として書くと禁止語の検査で止まることがあります。名前は、送らない一覧に入れた禁止語の一覧のファイルから読んでください。例えば、`tests/` の直下の test ファイルでは、次の形で一覧を読めます。送らないファイルを必要とする検査は、元のリポジトリで実行してください。
+
+```python
+from pathlib import Path
+
+word_list = Path(__file__).resolve().parents[1] / "noren-words.txt"
+forbidden_words = [
+    line.strip()
+    for line in word_list.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+```
+
 ### 設定を commit してから tag または commit ID を指定する
 
 noren は、`--tag` または `--commit` が指す commit から、送るファイル、`noren.yaml`、禁止語の一覧を読みます。working directory や後の commit で変更しても、その commit の検査や送信には反映されません。
@@ -116,6 +131,8 @@ README の訂正のように version を上げない変更は、`--commit` を�
 
 検査で止まった後に設定やファイルの中身を直した場合は、修正を commit し、その修正を含む tag または commit ID を選んでから、もう一度検査してください。
 
+noren は設定を指定した commit から読むため、`noren.yaml` を足す前に作った tag と commit は送れません。noren を使い始めて最初の公開では、設定を commit した後に新しい tag を作るか、設定を含む commit ID を指定してください。
+
 ### build する package に設定を入れない
 
 `noren.yaml` と禁止語の一覧は元のリポジトリに commit され、禁止語の一覧には外に出したくない識別子が並びます。noren は、送る一覧に含めない限りこの二つを送りません。しかし、元のリポジトリから package を作る別のツールは、この二つを含めることがあります。例えば、元のリポジトリの checkout から build した Python の sdist は、既定で追跡しているファイルをすべて含むため、それを PyPI に公開すると禁止語の一覧も公開されます。
@@ -127,7 +144,9 @@ package は、選んだファイルだけを持つ送り先のリポジトリか
 exclude = ["/noren.yaml", "/noren-words.txt"]
 ```
 
-公開する前に、build した package の中身を確かめてください。
+hatchling の `only-include` のように、package に入れるファイルを許可の一覧で決める設定では、一覧に書かない限り二つの設定のファイルは入らず、`exclude` に足しても効き目はありません。どちらの場合も、公開する前に、build した package の中のファイルを確かめてください。
+
+package registry に公開する前に noren で送ると、禁止語の検査が取り消せない公開より先に効きます。
 
 ## 送る前に確認する
 
@@ -143,6 +162,9 @@ uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
 tag: v1.0.0
 source_commit: 0123456789abcdef0123456789abcdef01234567
 destination: OWNER/public-project
+author:
+  name: Release Bot
+  email: release@example.invalid
 files:
 - README.md
 - src/app.py
@@ -151,7 +173,7 @@ commit: null
 pushed: false
 ```
 
-`source_commit`、`destination`、`files` の各 path を確認してください。dry-run は送り先の commit を作らず、送り先の branch と tag を更新しません。ただし、送り先の参照を読むので、Git のアクセスが必要です。author の名義も確認します。dry-run の成功は push の権限を保証しません。
+`source_commit`、`destination`、`author` の値と、`files` の各 path を確認してください。出力の `author.name` と `author.email` は、送り先の commit の author と committer の両方に使う値です。dry-run は送り先の commit を作らず、送り先の branch と tag を更新しません。ただし、送り先の参照を読むので、Git のアクセスが必要です。dry-run の成功は push の権限を保証しません。
 
 検査が成功すると、コマンドは終了コード 0 で終わります。どちらの一覧にも無いファイルがある場合、送る中身に禁止語がある場合、必須の設定や語を含む禁止語の一覧が無い場合、送り先を読めない場合などは、0 以外で終わり、理由を標準エラー出力に出します。未分類のファイルのエラーは path を示し、禁止語のエラーはファイルと行を示します。送る一覧に当たる submodule は除外する必要があります。symlink はリンク先の文字列を検査し、symlink のまま送ります。
 
@@ -165,7 +187,9 @@ tag 指定でも commit ID 指定でも、dry-run と push のどちらも、送
 uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
-最初の一回は、親の無い commit を作ります。次からは、送り先の直前の `main` の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。`--tag` を使う時は、送り先の `main` と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。元の tag が注釈付きでも、送り先の tag は新しい commit を直接指します。`--commit` を使う時は、送り先の `main` だけを更新し、tag を付けません。
+最初の一回は、親の無い commit を作ります。次からは、送り先の直前の `main` の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。`--tag` を使う時は、送り先の `main` と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。送り先の tag は軽い tag (注釈付きではない tag) で、元の tag が注釈付きでも、新しい commit を直接指します。`--commit` を使う時は、送り先の `main` だけを更新し、tag を付けません。
+
+noren は `--no-verify` を付けて push するため、元のリポジトリの `pre-push` などの Git の hook は動きません。秘密情報の検査などの追加の検査は、送る前に実行してください。
 
 次の元の tag を送る時は `--initial` を外します。
 
@@ -198,6 +222,7 @@ uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren
 | `tag` | 指定した元の tag の名前。`--commit` の時は `null`、どちらの指定も取得できない場合は空の文字列です。 |
 | `source_commit` | 送る file を取り出した元の commit の完全な ID。commit を決める前に止めた時は `null` です。 |
 | `destination` | 送り先の `OWNER/REPO`。取得できない場合は空の文字列です。 |
+| `author` | 送り先の commit の author と committer の両方に使う、解決した `name` と `email`。名義を決める前に止めた時は `null` です。 |
 | `files` | 選んだファイルの path の YAML の list。空の場合もあります。この一覧だけでは検査や push の成功は分かりません。 |
 | `destination_main_before` | 送る前に読んだ送り先の `main` の commit の ID。`null` は送り先を読めて `main` が無かった場合、`''` は値を取得できなかった場合です。 |
 | `commit` | 作った送り先の commit の ID。dry-run の時と、commit を作る前に止めた時は `null` です。 |
@@ -230,3 +255,5 @@ uv run noren publish --help
 ```
 
 コマンドの help は英語です。この README は初期セットアップ、検査、送信、結果の確認を扱います。プロジェクトの version の変更、build、パッケージのレジストリへの公開は、そのプロジェクトの release の手順を参照してください。
+
+noren の安定した使い方は、コマンドと出力の YAML です。noren の package の中の Python の module は内部の物で、version の間で変わることがあります。利用者の test から import せず、noren が選ぶファイルを確かめる時は dry-run の `files` を使ってください。
