@@ -1,0 +1,6 @@
+.nf/tmp/
+.nf/logs/
+.nf/research/
+src/noren/_version.py
+dist/
+__pycache__/
