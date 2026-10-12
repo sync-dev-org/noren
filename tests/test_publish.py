@@ -245,6 +245,7 @@ def test_included_submodule_stops_and_excluded_submodule_does_not_send_its_commi
 
 @pytest.mark.req("SP-NOREN-023")
 @pytest.mark.req("SP-NOREN-028")
+@pytest.mark.req("SP-NOREN-033")
 def test_publication_uses_annotated_tag_even_when_current_files_are_different(repos, invoke, result):
     """An annotated tag supplies the published bytes and settings regardless of later commits and dirty files."""
     tagged = repos.commit()
@@ -257,5 +258,6 @@ def test_publication_uses_annotated_tag_even_when_current_files_are_different(re
     repos.write("noren.yaml", "broken: [")
     code, sent, err = publish(invoke, result)
     assert code == 0 and err == "" and sent["destination"] == "example/public"
+    assert sent["source_commit"] == tagged
     assert repos.git("show", "main:public/readme.txt", destination=True).stdout == b"Public release\n"
     assert repos.git("cat-file", "-t", "refs/tags/v1", destination=True).stdout == b"commit\n"

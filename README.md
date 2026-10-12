@@ -70,7 +70,7 @@ author:
 | `word-list` | The forbidden-word file's path, relative to the repository root. The file must be inside the repository. |
 | `author` | Optional `name` and `email`. Both the destination commit's author and committer use these values. Replace the example identity with yours. |
 
-Every file in the tagged source tree must match `include` or `exclude`; a file in neither list stops the command. These lists classify tracked files in the tag, not untracked files in the working directory. Each list follows Git's `.gitignore` rules, including `#` comments, `!` negation, `/`-anchored paths, and `**`. Within a list, later matching rules take precedence. A negated child pattern cannot bring back a file while its parent directory remains excluded.
+Every file in the selected source commit's tree must match `include` or `exclude`; a file in neither list stops the command. These lists classify tracked files in that commit, not untracked files in the working directory. Each list follows Git's `.gitignore` rules, including `#` comments, `!` negation, `/`-anchored paths, and `**`. Within a list, later matching rules take precedence. A negated child pattern cannot bring back a file while its parent directory remains excluded.
 
 Keep the configuration and forbidden-word file in `exclude`, and add rules for any other tracked files in your repository. If you change `word-list`, update its exclusion too. All four required keys must be present; an explicitly empty `include` or `exclude` string is allowed, but every file still needs classification.
 
@@ -95,23 +95,43 @@ private@example.invalid
 
 The list must contain at least one nonblank line. Every nonblank line is an entry, including a line beginning with `#`; the word list has no comment syntax. noren compares substrings after Unicode NFKC normalization and case folding, so case and full-width forms also match. Bytes that cannot be decoded as UTF-8 are replaced for the inspection. The files are sent with their original bytes.
 
-### Commit the settings before selecting a tag
+### Commit the settings before selecting a tag or commit ID
 
-noren reads the selected files, `noren.yaml`, and the word list from the commit named by `--tag`. Changes in the working directory or later commits do not affect that tag's check or publication.
+noren reads the selected files, `noren.yaml`, and the word list from the commit named by `--tag` or `--commit`. Changes in the working directory or later commits do not affect that commit's check or publication.
 
-Commit the source files you intend to send, then commit the settings and create the source tag you will use:
+Commit the source files you intend to send, then commit the settings:
 
 ```sh
 git add noren.yaml noren-words.txt
 git commit -m "Configure noren"
+```
+
+Use `--tag` when you want to put the same tag name on the destination:
+
+```sh
 git tag v1.0.0
 ```
 
-If you correct settings or file contents after a failed check, commit the correction and choose a tag that contains it before checking again.
+For changes that do not increase the version, such as correcting a README, use `--commit` to send without creating a destination tag. Obtain the source commit ID with `git rev-parse HEAD`, then pass the printed ID to `--commit`. Only hexadecimal commit IDs and unique abbreviations are accepted; `HEAD`, branch names, tag names, nonexistent IDs, and ambiguous abbreviations stop the command.
+
+If you correct settings or file contents after a failed check, commit the correction and choose a tag or commit ID that contains it before checking again.
+
+### Keep the settings out of packages you build
+
+`noren.yaml` and the word list are committed to the source repository, and the word list names the private identifiers you want to keep in. noren never sends them unless you include them, but other tools that package the source repository can. For example, a Python sdist built from the source checkout includes every tracked file by default, so publishing it to PyPI would publish the word list.
+
+Build packages from the destination repository, which holds only the selected files, or exclude the settings in the packaging tool. With hatchling:
+
+```toml
+[tool.hatch.build.targets.sdist]
+exclude = ["/noren.yaml", "/noren-words.txt"]
+```
+
+Check the contents of built packages before publishing them.
 
 ## Check before sending
 
-`noren publish` defaults to dry-run. Both `--tag` and `--message` are required, even for a check. For the first publication, when the destination has no `main` branch:
+`noren publish` defaults to dry-run. Exactly one of `--tag` or `--commit` is required; providing both or neither stops the command. `--message` is also required, even for a check. For the first publication, when the destination has no `main` branch:
 
 ```sh
 uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
@@ -121,6 +141,7 @@ For a tag containing only `README.md` and `src/app.py` among the included files,
 
 ```yaml
 tag: v1.0.0
+source_commit: 0123456789abcdef0123456789abcdef01234567
 destination: OWNER/public-project
 files:
 - README.md
@@ -130,11 +151,11 @@ commit: null
 pushed: false
 ```
 
-Check `destination` and every path in `files`. Dry-run creates no destination commit and updates no destination branches or tags, but it reads the destination's references, so Git access is needed. It also resolves the author identity. A successful dry-run does not guarantee permission to push.
+Check `source_commit`, `destination`, and every path in `files`. Dry-run creates no destination commit and updates no destination branches or tags, but it reads the destination's references, so Git access is needed. It also resolves the author identity. A successful dry-run does not guarantee permission to push.
 
 The command exits with 0 if the check succeeds. It exits with a nonzero code and writes the reason to stderr if, for example, a file is in neither list, selected contents contain a forbidden word, a required setting or a nonempty word list is missing, or the destination cannot be read. Unclassified-file errors list paths; forbidden-word errors identify the file and line. Selected submodules must be excluded; symlinks are inspected using their link target text and sent as symlinks.
 
-Use `--initial` only when destination `main` is absent, for both dry-run and push. noren stops if `--initial` is given and `main` already exists, or if `--initial` is omitted and `main` does not exist. An existing destination tag of the requested name also stops publication.
+Use `--initial` only when destination `main` is absent, for both dry-run and push, with either source selector. noren stops if `--initial` is given and `main` already exists, or if `--initial` is omitted and `main` does not exist. With `--tag`, an existing destination tag of the requested name also stops publication.
 
 ## Send the checked files
 
@@ -144,7 +165,7 @@ Add `--push` to the command you checked:
 uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
-The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag points directly to the new commit, even if the source tag is annotated.
+The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only destination `main` and creates no tag.
 
 For a later source tag, omit `--initial`:
 
@@ -152,6 +173,15 @@ For a later source tag, omit `--initial`:
 uv run noren publish --tag v1.1.0 --message "Release v1.1.0"
 uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push
 ```
+
+To send a README correction without a tag, replace the example ID below with your source commit ID. Check and send the same ID:
+
+```sh
+uv run noren publish --commit a1b2c3d --message "Correct the README"
+uv run noren publish --commit a1b2c3d --message "Correct the README" --push
+```
+
+Add `--initial` to both commands if destination `main` does not exist yet. With `--commit`, the result has `tag: null` and `source_commit` contains the full ID even when you supplied an abbreviation.
 
 Choose a destination commit message appropriate for the files you are sending. noren uses that message instead of the source commit messages.
 
@@ -165,12 +195,13 @@ uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren
 
 | Key | Meaning |
 | --- | --- |
-| `tag` | The requested source tag name; an empty string if unavailable. |
+| `tag` | The requested source tag name; `null` with `--commit`, or an empty string if no selector is available. |
+| `source_commit` | The full ID of the source commit read for publication; `null` if the command stopped before resolving it. |
 | `destination` | The destination `OWNER/REPO`; an empty string if unavailable. |
 | `files` | The selected file paths as a YAML list, possibly empty. This list alone does not indicate a successful check or push. |
 | `destination_main_before` | The destination's `main` commit ID read before sending. `null` means the destination was read and `main` was absent; `''` means that value could not be obtained. |
 | `commit` | The created destination commit ID. `null` for dry-run or a failure before creating a commit. |
-| `pushed` | `true` when Git reported that destination `main` and the tag were updated; `false` for dry-run or when the command could not confirm a successful push. |
+| `pushed` | `true` when Git reported that destination `main` and, with `--tag`, the requested tag were updated; `false` for dry-run or when the command could not confirm a successful push. |
 
 A successful push exits with 0 and has `pushed: true` and a non-null `commit`. The ID is the destination commit's ID, not the source commit's ID.
 
@@ -181,6 +212,14 @@ git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main
 ```
 
 If both references show the printed `commit` ID, the update is present. If `main` has advanced since then, a matching tag still identifies the published snapshot; check the destination history to confirm that commit is an ancestor of the current `main`. If `main` still equals `destination_main_before` and the tag is absent, the update is not present at the time of the check. If the references differ otherwise, inspect the destination history before deciding what to do. A failed `ls-remote` does not establish whether the push succeeded. Do not infer the result from the exit code alone or blindly repeat the initial command: existing `main` or an existing tag will stop it.
+
+When `tag` is `null`, read only `main`:
+
+```sh
+git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main
+```
+
+If `main` equals the printed destination `commit`, the update is present. If `main` has advanced, inspect the destination history to confirm that commit is an ancestor of the current `main`. If `main` still equals `destination_main_before`, the update is not present at the time of the check. Resolve an uncertain result before repeating the command; commit publication has no destination tag to prevent sending the same snapshot again.
 
 ## Command help
 

@@ -17,7 +17,8 @@ def test_default_dry_run_reports_files_without_changing_either_repository(repos,
 
     assert code == 0 and err == ""
     assert result(out) == {
-        "tag": "v1", "destination": "example/public", "files": ["public/readme.txt"],
+        "tag": "v1", "source_commit": source_commit,
+        "destination": "example/public", "files": ["public/readme.txt"],
         "destination_main_before": None, "commit": None, "pushed": False,
     }
     assert repos.refs() == b""
@@ -220,7 +221,7 @@ def test_destination_cannot_be_the_source_repository(repos, invoke, result, orig
 @pytest.mark.req("SP-NOREN-033")
 @pytest.mark.parametrize("configuration", [None, "broken: [", "- list", "destination: example/public\ninclude: [list]\nexclude: ''\nword-list: noren-words.txt\n"])
 def test_missing_invalid_or_wrongly_typed_config_stops_with_a_complete_result(repos, invoke, result, configuration):
-    """Invalid tagged settings stop cleanly and preserve the six public output fields and their types."""
+    """Invalid tagged settings stop cleanly and preserve the seven public output fields and their types."""
     if configuration is None:
         (repos.source / "noren.yaml").unlink()
     else:

@@ -70,7 +70,7 @@ author:
 | `word-list` | 禁止語の一覧のファイルの path。リポジトリの root からの相対 path で、リポジトリの中のファイルを指定します。 |
 | `author` | 任意の `name` と `email`。送り先の commit の author と committer の両方に使います。例の値は利用する名義に置き換えてください。 |
 
-元の tag の tree にあるファイルは、すべて `include` または `exclude` に当たる必要があります。どちらにも無いファイルがあると、コマンドは止まります。一覧の対象は tag に記録されたファイルで、working directory の未追跡のファイルは対象にしません。各一覧は Git の `.gitignore` の規則に従い、`#` の comment、`!` の否定、`/` による root への固定、`**` を使えます。同じ一覧の中では後に書いた一致する規則が優先されます。親のディレクトリが除外されたままでは、子のファイルを否定の pattern だけで戻すことはできません。
+指定した元の commit の tree にあるファイルは、すべて `include` または `exclude` に当たる必要があります。どちらにも無いファイルがあると、コマンドは止まります。一覧の対象はその commit に記録されたファイルで、working directory の未追跡のファイルは対象にしません。各一覧は Git の `.gitignore` の規則に従い、`#` の comment、`!` の否定、`/` による root への固定、`**` を使えます。同じ一覧の中では後に書いた一致する規則が優先されます。親のディレクトリが除外されたままでは、子のファイルを否定の pattern だけで戻すことはできません。
 
 設定ファイルと禁止語の一覧のファイルは `exclude` に残し、リポジトリの他の追跡するファイルも一覧に加えてください。`word-list` を変えた場合は、そのファイルの除外も更新します。必須の四つの key はすべて必要です。`include` または `exclude` を空の文字列として設定することはできますが、どのファイルも分類する必要があります。
 
@@ -95,23 +95,43 @@ private@example.invalid
 
 一覧には空白でない行が一つ以上必要です。`#` で始まる行も含め、空白でない行はすべて禁止語になります。禁止語の一覧には comment の書式はありません。noren は Unicode の NFKC 正規化と case folding の後に部分一致で探すため、大文字と小文字の違い、全角の表記でも当たります。UTF-8 として読めない byte は、検査の際に置き換え文字として扱います。送るファイルの byte は元のままです。
 
-### 設定を commit してから tag を指定する
+### 設定を commit してから tag または commit ID を指定する
 
-noren は、`--tag` が指す commit から、送るファイル、`noren.yaml`、禁止語の一覧を読みます。working directory や後の commit で変更しても、その tag の検査や送信には反映されません。
+noren は、`--tag` または `--commit` が指す commit から、送るファイル、`noren.yaml`、禁止語の一覧を読みます。working directory や後の commit で変更しても、その commit の検査や送信には反映されません。
 
-送る予定の元のファイルを commit した後、設定を commit し、使う元の tag を作ります。
+送る予定の元のファイルを commit した後、設定を commit します。
 
 ```sh
 git add noren.yaml noren-words.txt
 git commit -m "Configure noren"
+```
+
+送り先にも同じ名前の tag を付けたい場合は、`--tag` を使います。
+
+```sh
 git tag v1.0.0
 ```
 
-検査で止まった後に設定やファイルの中身を直した場合は、修正を commit し、その修正を含む tag を選んでから、もう一度検査してください。
+README の訂正のように version を上げない変更は、`--commit` を使うと送り先に tag を付けずに送れます。`git rev-parse HEAD` で元の commit ID を取得し、出力された ID を `--commit` に渡します。指定できるのは 16 進の commit ID と一意に決まる省略形です。`HEAD`、branch の名前、tag の名前、存在しない ID、曖昧な省略形を指定すると止まります。
+
+検査で止まった後に設定やファイルの中身を直した場合は、修正を commit し、その修正を含む tag または commit ID を選んでから、もう一度検査してください。
+
+### build する package に設定を入れない
+
+`noren.yaml` と禁止語の一覧は元のリポジトリに commit され、禁止語の一覧には外に出したくない識別子が並びます。noren は、送る一覧に含めない限りこの二つを送りません。しかし、元のリポジトリから package を作る別のツールは、この二つを含めることがあります。例えば、元のリポジトリの checkout から build した Python の sdist は、既定で追跡しているファイルをすべて含むため、それを PyPI に公開すると禁止語の一覧も公開されます。
+
+package は、選んだファイルだけを持つ送り先のリポジトリから build するか、package を作るツールの設定で二つを外してください。hatchling の場合:
+
+```toml
+[tool.hatch.build.targets.sdist]
+exclude = ["/noren.yaml", "/noren-words.txt"]
+```
+
+公開する前に、build した package の中身を確かめてください。
 
 ## 送る前に確認する
 
-`noren publish` の既定の動作は dry-run です。検査の場合も `--tag` と `--message` は必須です。最初の一回で、送り先に `main` branch が無い場合:
+`noren publish` の既定の動作は dry-run です。`--tag` と `--commit` はどちらか一方が必須で、両方を指定した時とどちらも指定しない時は止まります。検査の場合も `--message` は必須です。最初の一回で、送り先に `main` branch が無い場合:
 
 ```sh
 uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
@@ -121,6 +141,7 @@ uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
 
 ```yaml
 tag: v1.0.0
+source_commit: 0123456789abcdef0123456789abcdef01234567
 destination: OWNER/public-project
 files:
 - README.md
@@ -130,11 +151,11 @@ commit: null
 pushed: false
 ```
 
-`destination` と `files` の各 path を確認してください。dry-run は送り先の commit を作らず、送り先の branch と tag を更新しません。ただし、送り先の参照を読むので、Git のアクセスが必要です。author の名義も確認します。dry-run の成功は push の権限を保証しません。
+`source_commit`、`destination`、`files` の各 path を確認してください。dry-run は送り先の commit を作らず、送り先の branch と tag を更新しません。ただし、送り先の参照を読むので、Git のアクセスが必要です。author の名義も確認します。dry-run の成功は push の権限を保証しません。
 
 検査が成功すると、コマンドは終了コード 0 で終わります。どちらの一覧にも無いファイルがある場合、送る中身に禁止語がある場合、必須の設定や語を含む禁止語の一覧が無い場合、送り先を読めない場合などは、0 以外で終わり、理由を標準エラー出力に出します。未分類のファイルのエラーは path を示し、禁止語のエラーはファイルと行を示します。送る一覧に当たる submodule は除外する必要があります。symlink はリンク先の文字列を検査し、symlink のまま送ります。
 
-dry-run と push のどちらも、送り先に `main` が無い時だけ `--initial` を使います。`--initial` があって `main` が存在する場合と、`--initial` が無く `main` が存在しない場合は止まります。送り先に指定した名前の tag がすでにある場合も止まります。
+tag 指定でも commit ID 指定でも、dry-run と push のどちらも、送り先に `main` が無い時だけ `--initial` を使います。`--initial` があって `main` が存在する場合と、`--initial` が無く `main` が存在しない場合は止まります。`--tag` を使う時は、送り先に指定した名前の tag がすでにある場合も止まります。
 
 ## 確認したファイルを送る
 
@@ -144,7 +165,7 @@ dry-run と push のどちらも、送り先に `main` が無い時だけ `--ini
 uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
-最初の一回は、親の無い commit を作ります。次からは、送り先の直前の `main` の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。noren は、送り先の `main` と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。元の tag が注釈付きでも、送り先の tag は新しい commit を直接指します。
+最初の一回は、親の無い commit を作ります。次からは、送り先の直前の `main` の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。`--tag` を使う時は、送り先の `main` と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。元の tag が注釈付きでも、送り先の tag は新しい commit を直接指します。`--commit` を使う時は、送り先の `main` だけを更新し、tag を付けません。
 
 次の元の tag を送る時は `--initial` を外します。
 
@@ -152,6 +173,15 @@ uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 uv run noren publish --tag v1.1.0 --message "Release v1.1.0"
 uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push
 ```
+
+README の訂正を tag 無しで送る場合は、次の ID を元の commit ID に置き換え、同じ ID で検査と送信を行います。
+
+```sh
+uv run noren publish --commit a1b2c3d --message "Correct the README"
+uv run noren publish --commit a1b2c3d --message "Correct the README" --push
+```
+
+送り先の `main` がまだ無い場合は、両方のコマンドに `--initial` を加えます。`--commit` を使う時は、結果の `tag` は `null` になり、省略形の ID を指定した場合も `source_commit` は完全な ID になります。
 
 送るファイルに合った送り先の commit message を指定してください。noren は元の commit message の代わりに、その message を使います。
 
@@ -165,12 +195,13 @@ uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren
 
 | key | 意味 |
 | --- | --- |
-| `tag` | 指定した元の tag の名前。取得できない場合は空の文字列です。 |
+| `tag` | 指定した元の tag の名前。`--commit` の時は `null`、どちらの指定も取得できない場合は空の文字列です。 |
+| `source_commit` | 送る file を取り出した元の commit の完全な ID。commit を決める前に止めた時は `null` です。 |
 | `destination` | 送り先の `OWNER/REPO`。取得できない場合は空の文字列です。 |
 | `files` | 選んだファイルの path の YAML の list。空の場合もあります。この一覧だけでは検査や push の成功は分かりません。 |
 | `destination_main_before` | 送る前に読んだ送り先の `main` の commit の ID。`null` は送り先を読めて `main` が無かった場合、`''` は値を取得できなかった場合です。 |
 | `commit` | 作った送り先の commit の ID。dry-run の時と、commit を作る前に止めた時は `null` です。 |
-| `pushed` | Git が送り先の `main` と tag の更新を成功と報告した場合は `true`。dry-run の時と、コマンドが push の成功を確認できなかった場合は `false` です。 |
+| `pushed` | Git が送り先の `main` と、`--tag` の時は指定した tag の更新を成功と報告した場合は `true`。dry-run の時と、コマンドが push の成功を確認できなかった場合は `false` です。 |
 
 push の成功時は終了コードが 0 で、`pushed: true` となり、`commit` は `null` 以外の値になります。この ID は送り先の commit の ID で、元の commit の ID ではありません。
 
@@ -181,6 +212,14 @@ git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main
 ```
 
 両方の参照が出力された `commit` の ID を示す場合、更新は送り先にあります。その後に `main` が進んだ場合も、tag が同じ ID なら送った時のファイルを特定できます。送り先の履歴を見て、その commit が現在の `main` の祖先かを確かめてください。`main` が `destination_main_before` のままで tag が無い場合、確認した時点では更新がありません。他の値になっている場合は、送り先の履歴を調べてから次の操作を決めてください。`ls-remote` の失敗では、push の成否は分かりません。終了コードだけで結果を決めたり、初回のコマンドをそのまま繰り返したりしないでください。すでに `main` や tag があれば、コマンドは止まります。
+
+`tag` が `null` の場合は、`main` だけを読みます。
+
+```sh
+git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main
+```
+
+`main` が出力された送り先の `commit` の ID と同じなら、更新は送り先にあります。その後に `main` が進んだ場合は、送り先の履歴を見て、その commit が現在の `main` の祖先かを確かめてください。`main` が `destination_main_before` のままなら、確認した時点では更新がありません。commit ID で送る時は送り先の tag による重複の防止が無いので、結果が不明な場合は成否を確かめてからコマンドを繰り返してください。
 
 ## コマンドの help
 

@@ -34,7 +34,7 @@ def parser() -> Parser:
         prog="noren", allow_abbrev=False,
         description=(
             "Send selected files from one git repository to another as a single commit.\n\n"
-            "Use init to create settings and publish to check a tagged snapshot.\n"
+            "Use init to create settings and publish to check a source tag or commit.\n"
             "Publish defaults to dry-run and prints one YAML document.\n"
             "Commands exit with 0 on success and nonzero on errors, reported to stderr.\n\n"
             "Examples:\n  noren init\n"
@@ -53,33 +53,40 @@ def parser() -> Parser:
             "Existing templates are preserved. No arguments or interactive input are needed.\n"
             "Print setup instructions to stdout; exit 0 on success, nonzero on errors to stderr.\n\n"
             "Examples:\n  noren init\n\n"
-            "Related:\n  Commit the settings, create a tag, then run noren publish --help."
+            "Related:\n  Commit the settings, then run noren publish --help to choose a tag or commit ID."
         ),
     )
     publish = commands.add_parser(
         "publish", allow_abbrev=False,
-        help="Check or send a tagged release to the destination repository.",
+        help="Check or send a source tag or commit to the destination repository.",
         description=(
-            "Send selected files from a source tag to a GitHub repository as one commit.\n\n"
-            "Read noren.yaml, the forbidden words, and all files from the specified tag.\n"
+            "Send selected files from a source tag or commit to a GitHub repository as one commit.\n\n"
+            "Specify exactly one of --tag or --commit, and supply --message even for dry-run.\n"
+            "Read noren.yaml, the forbidden words, and all files from the selected source commit.\n"
             "Reject unclassified files and forbidden content. Exclude takes precedence over include.\n"
-            "Default to dry-run. With --push, extend destination main and update the same tag\n"
-            "together in one atomic push without force or source history.\n"
-            "Print one YAML document with tag, destination, files, destination_main_before,\n"
-            "commit, and pushed, on success and failure. Dry-run has commit: null.\n"
+            "Default to dry-run. With --push, extend destination main without force or source history.\n"
+            "With --tag, update main and the same tag together in one atomic push.\n"
+            "With --commit, update only main and create no tag; names such as HEAD are rejected.\n"
+            "Print one YAML document with tag, source_commit, destination, files,\n"
+            "destination_main_before, commit, and pushed, on success and failure.\n"
+            "tag is null with --commit. source_commit is the full source commit ID, or null\n"
+            "if unresolved. Dry-run has commit: null. pushed confirms all requested updates.\n"
             "destination_main_before is an empty string when unread and null when main is absent.\n"
             "Exit 0 on success, nonzero on errors with reasons on stderr.\n\n"
             "Examples:\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial --push\n"
-            "  noren publish --tag v1.1.0 --message 'Release v1.1.0' --push\n\n"
-            "Related:\n  Run noren init first, then commit the settings and create a source tag.\n"
-            "  After publishing, compare destination main and tag with the printed commit ID."
+            "  noren publish --tag v1.1.0 --message 'Release v1.1.0' --push\n"
+            "  noren publish --commit a1b2c3d --message 'Correct the README'\n"
+            "  noren publish --commit a1b2c3d --message 'Correct the README' --push\n\n"
+            "Related:\n  Run noren init first, then commit the settings and choose a tag or commit ID.\n"
+            "  After publishing, compare destination main and any requested tag with the printed commit ID."
         ),
     )
-    publish.add_argument("--tag", metavar="NAME", help="Required source tag to read and publish.")
+    publish.add_argument("--tag", metavar="NAME", help="Source tag to read and publish; choose exactly one of --tag or --commit.")
+    publish.add_argument("--commit", metavar="ID", help="Hexadecimal source commit ID, including a unique abbreviation; update main without a tag.")
     publish.add_argument("--message", metavar="TEXT", help="Required destination commit message, including for dry-run.")
-    publish.add_argument("--push", action="store_true", help="Actually update destination main and tag; default is dry-run.")
+    publish.add_argument("--push", action="store_true", help="Actually update destination main and any requested tag; default is dry-run.")
     publish.add_argument("--initial", action="store_true", help="Explicit first publication: require main to be absent and create a root commit.")
     command.publish_parser = publish
     return command
@@ -88,7 +95,7 @@ def parser() -> Parser:
 def main(argv=None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     output = {
-        "tag": "", "destination": "", "files": [],
+        "tag": "", "source_commit": None, "destination": "", "files": [],
         "destination_main_before": "", "commit": None, "pushed": False,
     }
     publishing = bool(arguments and arguments[0] == "publish")
@@ -99,14 +106,14 @@ def main(argv=None) -> int:
         except SystemExit as exit:
             publishing = False
             return int(exit.code)
-        except NorenError:
+        finally:
             partial = getattr(command.publish_parser, "partial_options", None)
-            output["tag"] = getattr(partial, "tag", None) or ""
-            raise
+            output["tag"] = getattr(partial, "tag", None) or (
+                None if getattr(partial, "commit", None) is not None else ""
+            )
         if options.command == "init":
             initialize()
         elif options.command == "publish":
-            output["tag"] = options.tag or ""
             publish(options, output)
         else:
             print(command.format_help(), end="")

@@ -1,4 +1,4 @@
-"""Validate a tagged source snapshot before constructing a destination commit."""
+"""Validate a source snapshot before constructing a destination commit."""
 
 import json
 import os
@@ -17,11 +17,11 @@ from noren.git import NorenError, Repository, run_git
 def settings(repository, entries, output):
     config_entry = next((entry for entry in entries if entry.path == "noren.yaml"), None)
     if config_entry is None:
-        raise NorenError("noren.yaml is missing from the specified tag.")
+        raise NorenError("noren.yaml is missing from the selected source commit.")
     try:
         config = yaml.safe_load(repository.blob(config_entry).decode("utf-8"))
     except (UnicodeError, yaml.YAMLError, NorenError) as error:
-        raise NorenError(f"Cannot read noren.yaml from the tag: {error}") from error
+        raise NorenError(f"Cannot read noren.yaml from the selected source commit: {error}") from error
     if not isinstance(config, dict):
         raise NorenError("noren.yaml must be a YAML mapping.")
     if isinstance(config.get("destination"), str):
@@ -43,7 +43,7 @@ def settings(repository, entries, output):
 def match_lists(entries, config):
     # The virtual worktree has no source files or .gitignore files. Git infers
     # parent directories from the paths; a trailing slash identifies gitlinks
-    # as directories. Only the two tagged noren lists supply ignore rules.
+    # as directories. Only the two committed noren lists supply ignore rules.
     requests = {
         entry.path + ("/" if entry.kind == "commit" else ""): entry.path
         for entry in entries
@@ -97,7 +97,7 @@ def normalized(text: str) -> str:
 def inspect_content(repository, entries, selected, config):
     word_entry = next((entry for entry in entries if entry.path == config["word-list"]), None)
     if word_entry is None:
-        raise NorenError(f"The word-list file {config['word-list']} is missing from the tag.")
+        raise NorenError(f"The word-list file {config['word-list']} is missing from the selected source commit.")
     words = [
         normalized(line.strip())
         for line in repository.blob(word_entry).decode("utf-8", errors="replace").splitlines()
@@ -218,25 +218,44 @@ def send(repository, selected, blobs, identity, url, options, output):
             "-c", "commit.gpgSign=false", "commit-tree", tree, *parents,
             input=(options.message if options.message.endswith("\n") else options.message + "\n").encode("utf-8"), env=environment,
         ).decode().strip()
+        refspecs = [f"{output['commit']}:refs/heads/main"]
+        if options.tag is not None:
+            refspecs.append(f"{output['commit']}:refs/tags/{options.tag}")
         repository.git(
             "push", "--atomic", "--no-verify", "--no-follow-tags", url,
-            f"{output['commit']}:refs/heads/main", f"{output['commit']}:refs/tags/{options.tag}",
+            *refspecs,
             env=environment,
         )
         output["pushed"] = True
 
 
+def source_commit(repository, options):
+    if options.tag is not None:
+        repository.git("check-ref-format", f"refs/tags/{options.tag}")
+        try:
+            return repository.git("rev-parse", "--verify", f"refs/tags/{options.tag}^{{commit}}").decode().strip()
+        except NorenError as error:
+            raise NorenError(f"Source tag {options.tag} is missing or does not point to a commit.") from error
+    if not re.fullmatch(r"[0-9a-fA-F]+", options.commit):
+        raise NorenError("--commit requires a hexadecimal commit ID, not a branch, tag, or HEAD.")
+    # Disambiguate object IDs directly so a hexadecimal ref name cannot override
+    # the selected object. Do not peel annotated-tag objects into commits.
+    candidates = repository.git("rev-parse", f"--disambiguate={options.commit.lower()}").decode().splitlines()
+    if len(candidates) != 1 or repository.git("cat-file", "-t", candidates[0]).strip() != b"commit":
+        raise NorenError(f"Source commit ID {options.commit} is missing, ambiguous, or does not identify a commit.")
+    return candidates[0]
+
+
 def publish(options, output):
-    if not options.tag:
-        raise NorenError("--tag is required; specify an existing source tag.")
+    if (options.tag is None) == (options.commit is None):
+        raise NorenError("Specify exactly one of --tag or --commit.")
+    if options.tag == "":
+        raise NorenError("--tag requires an existing source tag name.")
     if not options.message or not options.message.strip():
         raise NorenError("--message is required. Example: --message 'Release v1.0.0'.")
     repository = Repository.discover()
-    repository.git("check-ref-format", f"refs/tags/{options.tag}")
-    try:
-        commit = repository.git("rev-parse", "--verify", f"refs/tags/{options.tag}^{{commit}}").decode().strip()
-    except NorenError as error:
-        raise NorenError(f"Source tag {options.tag} is missing or does not point to a commit.") from error
+    commit = source_commit(repository, options)
+    output["source_commit"] = commit
     entries = repository.entries(commit)
     config = settings(repository, entries, output)
     selected = choose_files(entries, config, output)
@@ -245,7 +264,10 @@ def publish(options, output):
     reject_source_destination(repository, config, url)
     identity = author(config)
     remote_refs = {}
-    for line in repository.git("ls-remote", "--refs", url, "refs/heads/main", f"refs/tags/{options.tag}").decode().splitlines():
+    refs = ["refs/heads/main"]
+    if options.tag is not None:
+        refs.append(f"refs/tags/{options.tag}")
+    for line in repository.git("ls-remote", "--refs", url, *refs).decode().splitlines():
         oid, ref = line.split("\t", 1)
         remote_refs[ref] = oid
     output["destination_main_before"] = remote_refs.get("refs/heads/main")
@@ -253,7 +275,7 @@ def publish(options, output):
         raise NorenError("--initial requires destination main to be absent.")
     if not options.initial and output["destination_main_before"] is None:
         raise NorenError("Destination main is absent; use --initial for the first publication.")
-    if f"refs/tags/{options.tag}" in remote_refs:
+    if options.tag is not None and f"refs/tags/{options.tag}" in remote_refs:
         raise NorenError(f"Destination tag {options.tag} already exists; main and tag are unchanged.")
     if options.push:
         send(repository, selected, blobs, identity, url, options, output)

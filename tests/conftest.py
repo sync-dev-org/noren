@@ -14,11 +14,12 @@ class Repositories:
     source: Path
     destination: Path
 
-    def git(self, *args: str, destination: bool = False, check: bool = True):
+    def git(self, *args: str, destination: bool = False, check: bool = True, input: bytes | None = None):
         return subprocess.run(
             ["git", "-C", str(self.destination if destination else self.source), *args],
             capture_output=True,
             check=check,
+            input=input,
         )
 
     def write(self, name: str, content: str | bytes):
@@ -122,9 +123,10 @@ def result():
         assert len(documents) == 1
         data = documents[0]
         assert set(data) == {
-            "tag", "destination", "files", "destination_main_before", "commit", "pushed",
+            "tag", "source_commit", "destination", "files", "destination_main_before", "commit", "pushed",
         }
-        assert isinstance(data["tag"], str)
+        assert data["tag"] is None or isinstance(data["tag"], str)
+        assert data["source_commit"] is None or isinstance(data["source_commit"], str)
         assert isinstance(data["destination"], str)
         assert isinstance(data["files"], list)
         assert all(isinstance(path, str) for path in data["files"])

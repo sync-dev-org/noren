@@ -38,5 +38,5 @@ def initialize() -> None:
         "Created noren.yaml and noren-words.txt.\n"
         "Edit noren.yaml to set destination, include, exclude, and word-list.\n"
         "Configure the required forbidden words in noren-words.txt before publishing.\n"
-        "Commit these settings and create a tag, then run noren publish to check them."
+        "Commit these settings, then run noren publish with a tag or commit ID to check them."
     )
