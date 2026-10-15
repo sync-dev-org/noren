@@ -1,6 +1,6 @@
 # noren
 
-[English](README.md)
+[English](README.md) · [文書の site](https://sync-dev-org.github.io/noren/ja/)
 
 noren は、Git リポジトリで選んだファイルを別のリポジトリへ一つの commit として送るコマンドです。パッケージのレジストリへの公開は行いません。
 
@@ -110,19 +110,6 @@ private@example.invalid
 
 一覧には空白でない行が一つ以上必要です。`#` で始まる行も含め、空白でない行はすべて禁止語になります。禁止語の一覧には comment の書式はありません。noren は Unicode の NFKC 正規化と case folding の後に部分一致で探すため、大文字と小文字の違い、全角の表記でも当たります。UTF-8 として読めない byte は、検査の際に置き換え文字として扱います。送るファイルの byte は元のままです。
 
-公開する test が private の名前を確かめる場合、名前を test に文字列として書くと禁止語の検査で止まることがあります。名前は、送らない一覧に入れた禁止語の一覧のファイルから読んでください。例えば、`tests/` の直下の test ファイルでは、次の形で一覧を読めます。送らないファイルを必要とする検査は、元のリポジトリで実行してください。
-
-```python
-from pathlib import Path
-
-word_list = Path(__file__).resolve().parents[1] / "noren-words.txt"
-forbidden_words = [
-    line.strip()
-    for line in word_list.read_text(encoding="utf-8").splitlines()
-    if line.strip()
-]
-```
-
 ### 設定を commit してから tag または commit ID を指定する
 
 noren は、`--tag` または `--commit` が指す commit から、送るファイル、`noren.yaml`、禁止語の一覧を読みます。working directory や後の commit で変更しても、その commit の検査や送信には反映されません。
@@ -143,25 +130,6 @@ git tag v1.0.0
 README の訂正のように version を上げない変更は、`--commit` を使うと送り先に tag を付けずに送れます。`git rev-parse HEAD` で元の commit ID を取得し、出力された ID を `--commit` に渡します。指定できるのは 16 進の commit ID と一意に決まる省略形です。`HEAD`、branch の名前、tag の名前、存在しない ID、曖昧な省略形を指定すると止まります。
 
 検査で止まった後に設定やファイルの中身を直した場合は、修正を commit し、その修正を含む tag または commit ID を選んでから、もう一度検査してください。
-
-noren は設定を指定した commit から読むため、`noren.yaml` を足す前に作った tag と commit は送れません。noren を使い始めて最初の公開では、設定を commit した後に新しい tag を作るか、設定を含む commit ID を指定してください。
-
-### build する package に設定を入れない
-
-`noren.yaml` と禁止語の一覧は元のリポジトリに commit され、禁止語の一覧には外に出したくない識別子が並びます。noren は、送る一覧に含めない限りこの二つを送りません。しかし、元のリポジトリから package を作る別のツールは、この二つを含めることがあります。例えば、元のリポジトリの checkout から build した Python の sdist は、既定で追跡しているファイルをすべて含むため、それを PyPI に公開すると禁止語の一覧も公開されます。
-
-package は、選んだファイルだけを持つ送り先のリポジトリから build するか、package を作るツールの設定で二つを外してください。hatchling の場合:
-
-```toml
-[tool.hatch.build.targets.sdist]
-exclude = ["/noren.yaml", "/noren-words.txt"]
-```
-
-hatchling の `only-include` のように、package に入れるファイルを許可の一覧で決める設定では、一覧に書かない限り二つの設定のファイルは入らず、`exclude` に足しても効き目はありません。どちらの場合も、公開する前に、build した package の中のファイルを確かめてください。
-
-package registry に公開する前に noren で送ると、禁止語の検査が取り消せない公開より先に効きます。
-
-noren の検査は選んだファイルの中身だけが対象で、build backend が package に追加する `PKG-INFO` や生成された version のファイルなどは検査しません。package registry に公開する前に、build した package を同じ禁止語の一覧で検査してください。
 
 ## 送る前に確認する
 
@@ -203,10 +171,6 @@ noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
 最初の一回は、親の無い commit を作ります。次からは、送り先の直前の `main` の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。`--tag` を使う時は、送り先の `main` と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。送り先の tag は軽い tag (注釈付きではない tag) で、元の tag が注釈付きでも、新しい commit を直接指します。`--commit` を使う時は、送り先の `main` だけを更新し、tag を付けません。
-
-noren は送り先の履歴を書き換えないため、送った snapshot はすべて履歴に残ります。後の送信でファイルを送る一覧から外しても、そのファイルは送り先の古い commit と tag から読めます。最初は private の送り先のリポジトリを後で public にすると、それまでの snapshot もすべて公開されます。最初の `--initial` の前から、すでに公開する物として中身を準備してください。
-
-noren は `--no-verify` を付けて push するため、元のリポジトリの `pre-push` などの Git の hook は動きません。秘密情報の検査などの追加の検査は、送る前に実行してください。
 
 次の元の tag を送る時は `--initial` を外します。
 
@@ -273,4 +237,4 @@ noren publish --help
 
 コマンドの help は英語です。この README は初期セットアップ、検査、送信、結果の確認を扱います。プロジェクトの version の変更、build、パッケージのレジストリへの公開は、そのプロジェクトの release の手順を参照してください。
 
-noren の安定した使い方は、コマンドと出力の YAML です。noren の package の中の Python の module は内部の物で、version の間で変わることがあります。利用者の test から import せず、noren が選ぶファイルを確かめる時は dry-run の `files` を使ってください。
+一般的な公開の流れ、package の検査、落とし穴、TIPS は、[文書の site](https://sync-dev-org.github.io/noren/ja/) を参照してください。

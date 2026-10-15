@@ -3,4 +3,5 @@
 .nf/research/
 src/noren/_version.py
 dist/
+site/
 __pycache__/

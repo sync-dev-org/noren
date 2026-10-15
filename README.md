@@ -1,6 +1,6 @@
 # noren
 
-[日本語](README.ja.md)
+[日本語](README.ja.md) · [Documentation](https://sync-dev-org.github.io/noren/)
 
 noren sends selected files from one Git repository to another as a single commit; it does not publish packages to a registry.
 
@@ -110,19 +110,6 @@ private@example.invalid
 
 The list must contain at least one nonblank line. Every nonblank line is an entry, including a line beginning with `#`; the word list has no comment syntax. noren compares substrings after Unicode NFKC normalization and case folding, so case and full-width forms also match. Bytes that cannot be decoded as UTF-8 are replaced for the inspection. The files are sent with their original bytes.
 
-If published tests check private names, writing those names as literals in the tests can trigger forbidden-word rejection. Read the names from the excluded word-list file instead. For example, a test file directly under `tests/` can load the list as follows; run checks that need this excluded file in the source repository:
-
-```python
-from pathlib import Path
-
-word_list = Path(__file__).resolve().parents[1] / "noren-words.txt"
-forbidden_words = [
-    line.strip()
-    for line in word_list.read_text(encoding="utf-8").splitlines()
-    if line.strip()
-]
-```
-
 ### Commit the settings before selecting a tag or commit ID
 
 noren reads the selected files, `noren.yaml`, and the word list from the commit named by `--tag` or `--commit`. Changes in the working directory or later commits do not affect that commit's check or publication.
@@ -143,25 +130,6 @@ git tag v1.0.0
 For changes that do not increase the version, such as correcting a README, use `--commit` to send without creating a destination tag. Obtain the source commit ID with `git rev-parse HEAD`, then pass the printed ID to `--commit`. Only hexadecimal commit IDs and unique abbreviations are accepted; `HEAD`, branch names, tag names, nonexistent IDs, and ambiguous abbreviations stop the command.
 
 If you correct settings or file contents after a failed check, commit the correction and choose a tag or commit ID that contains it before checking again.
-
-Tags and commits created before you added `noren.yaml` cannot be sent, because noren reads the settings from the selected commit. For the first publication after adopting noren, create a new tag, or choose a commit ID, that contains the committed settings.
-
-### Keep the settings out of packages you build
-
-`noren.yaml` and the word list are committed to the source repository, and the word list names the private identifiers you want to keep in. noren never sends them unless you include them, but other tools that package the source repository can. For example, a Python sdist built from the source checkout includes every tracked file by default, so publishing it to PyPI would publish the word list.
-
-Build packages from the destination repository, which holds only the selected files, or exclude the settings in the packaging tool. With hatchling:
-
-```toml
-[tool.hatch.build.targets.sdist]
-exclude = ["/noren.yaml", "/noren-words.txt"]
-```
-
-If the packaging tool selects files with an allow list, such as hatchling's `only-include`, the two settings files stay out unless the list names them, and adding them to `exclude` has no effect. In either case, check the files in built packages before publishing them.
-
-Sending with noren before publishing to a package registry lets the forbidden-word check run before that irreversible publication.
-
-noren checks only the contents of the selected files. Files added to a package by the build backend, such as `PKG-INFO` and generated version files, are not checked. Check built packages with the same word list before publishing them to a package registry.
 
 ## Check before sending
 
@@ -203,10 +171,6 @@ noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
 The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag is lightweight (not annotated) and points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only destination `main` and creates no tag.
-
-noren never rewrites destination history, so every published snapshot remains in it. Removing a file from a later selection does not remove it from old destination commits and tags. If you make an initially private destination repository public, all earlier snapshots become public too. Prepare the very first `--initial` publication as if it were already public.
-
-noren pushes with `--no-verify`, so Git hooks in the source repository, such as `pre-push`, do not run. Run any additional checks, such as secret scanning, before you send.
 
 For a later source tag, omit `--initial`:
 
@@ -273,4 +237,4 @@ noren publish --help
 
 Command help is in English. This README covers setup, checks, sending, and verification. Your project's version changes, builds, and publication to package registries belong to its own release instructions.
 
-The commands and their YAML output are noren's stable interface. The Python modules inside the noren package are internal and may change between versions. Do not import them from your project's tests; to check which files noren selects, use the `files` list from a dry-run.
+For general publication workflows, package checks, pitfalls, and tips, read the [documentation](https://sync-dev-org.github.io/noren/).

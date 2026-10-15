@@ -11,6 +11,9 @@ from noren.publishing import publish
 from noren.setup import initialize
 
 
+DOCUMENTATION_URL = "https://sync-dev-org.github.io/noren/"
+
+
 class Parser(argparse.ArgumentParser):
     def parse_known_args(self, args=None, namespace=None):
         self.partial_options = namespace if namespace is not None else argparse.Namespace()
@@ -27,7 +30,11 @@ class Parser(argparse.ArgumentParser):
                 formatter.start_section("Options" if group.title == "options" else group.title)
                 formatter.add_arguments(group._group_actions)
                 formatter.end_section()
-        return f"{self.description}\n\n{formatter.format_help()}"
+        return (
+            f"{self.description}\n"
+            f"  For details, see the documentation: {DOCUMENTATION_URL}\n\n"
+            f"{formatter.format_help()}"
+        )
 
 
 def parser() -> Parser:
@@ -87,12 +94,16 @@ def parser() -> Parser:
             "Notes:\n"
             "  - Settings and the word list come from the selected source commit, not the working tree.\n"
             "    Commit corrections, then select a tag or commit containing them.\n"
+            "    Review destination, author, and files in dry-run before adding --push.\n"
             "  - noren.yaml and the word list are committed to the source repository and may enter packages.\n"
             "    Build from the destination repository or exclude both files in your build backend.\n"
             "  - Send with noren before publishing to a package registry so forbidden-word checks\n"
             "    run before irreversible publication. Only selected files are checked; files added\n"
             "    by the build backend are not checked. Check built packages with the same word list\n"
-            "    before publishing them.\n"
+            "    before publishing them. Registry deletion may leave cached copies; review packages\n"
+            "    before upload.\n"
+            "  - Publish documentation from checked destination sources; keep internal details out\n"
+            "    of public documentation and README files.\n"
             "  - Each publication adds a commit; destination history is never rewritten.\n"
             "    Removed files remain readable in old commits and tags. Making a private destination\n"
             "    public exposes every snapshot; prepare the first --initial publication as public.\n"

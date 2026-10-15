@@ -1,0 +1,44 @@
+site_name: noren
+site_description: Publication workflows, pitfalls, and tips for noren
+site_url: https://sync-dev-org.github.io/noren/
+repo_url: https://github.com/sync-dev-org/noren
+edit_uri: ""
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.code.copy
+
+nav:
+  - Overview: index.md
+  - Publication workflow: publication-workflow.md
+  - Package checks: package-checks.md
+  - Snapshots and tests: snapshots-and-tests.md
+
+plugins:
+  - search:
+      lang: [en, ja]
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: false
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: ja
+          name: 日本語
+          build: true
+          site_description: noren を使う公開の流れ、落とし穴、TIPS
+          nav_translations:
+            Overview: 概要
+            Publication workflow: 公開の流れ
+            Package checks: package の検査
+            Snapshots and tests: snapshot と test
+
+markdown_extensions:
+  - fenced_code
+  - tables
+  - toc:
+      permalink: true

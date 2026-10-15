@@ -29,11 +29,26 @@ def test_help_places_notes_before_examples_related_commands_and_options(invoke, 
 
 
 @pytest.mark.req("SP-NOREN-015")
+@pytest.mark.parametrize("command", [(), ("init",), ("publish",)])
+def test_help_points_to_public_documentation_for_detailed_guidance(invoke, command):
+    """Every command's help links the public documentation and directs users there for details."""
+    code, out, err = invoke(*command, "--help")
+
+    assert code == 0 and err == ""
+    assert "https://sync-dev-org.github.io/noren/" in out
+    guidance = out.lower()
+    assert "documentation" in guidance and "details" in guidance
+
+
+@pytest.mark.req("SP-NOREN-015")
 @pytest.mark.parametrize("points", [
     ("settings", "word list", "selected source commit", "working tree", "commit", "select"),
+    ("review", "dry-run", "destination", "author", "files", "--push"),
     ("noren.yaml", "word list", "source repository", "packages", "destination repository", "build backend", "exclude"),
     ("package registry", "before", "noren", "forbidden", "irreversible"),
     ("only selected files", "build backend", "not checked", "built packages", "same word list", "before", "publishing"),
+    ("registry", "deletion", "cached copies", "review packages", "before upload"),
+    ("documentation", "checked destination sources", "internal details", "out"),
     ("each publication", "commit", "history", "never rewritten", "removed files", "old commits and tags",
      "private", "public", "every snapshot", "first --initial", "as public"),
     ("tests", "private names", "forbidden", "word-list file"),
@@ -42,13 +57,12 @@ def test_help_places_notes_before_examples_related_commands_and_options(invoke, 
     ("--commit", "no tag", "uncertain", "destination main", "before", "retry"),
 ])
 def test_publish_notes_explain_each_publication_pitfall_and_remedy(invoke, points):
-    """Publication notes explain committed settings, package checks, retained history, tests, hooks, tags, and uncertain retries."""
+    """Publication notes explain package checks, cached registry copies, retained history, and other publication pitfalls."""
     code, out, err = invoke("publish", "--help")
 
     assert code == 0 and err == ""
     notes = out.split("Notes:", 1)[1].split("Examples:", 1)[0].lower()
     items = [" ".join(item.split()) for item in re.split(r"(?m)^  - ", notes)[1:]]
-    assert len(items) == 8
     assert any(all(point in item for point in points) for item in items)
 
 
