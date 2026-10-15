@@ -33,19 +33,22 @@ def test_help_places_notes_before_examples_related_commands_and_options(invoke, 
     ("settings", "word list", "selected source commit", "working tree", "commit", "select"),
     ("noren.yaml", "word list", "source repository", "packages", "destination repository", "build backend", "exclude"),
     ("package registry", "before", "noren", "forbidden", "irreversible"),
+    ("only selected files", "build backend", "not checked", "built packages", "same word list", "before", "publishing"),
+    ("each publication", "commit", "history", "never rewritten", "removed files", "old commits and tags",
+     "private", "public", "every snapshot", "first --initial", "as public"),
     ("tests", "private names", "forbidden", "word-list file"),
     ("source", "hooks", "pre-push", "checks", "before"),
     ("destination", "lightweight", "tags", "commit"),
     ("--commit", "no tag", "uncertain", "destination main", "before", "retry"),
 ])
 def test_publish_notes_explain_each_publication_pitfall_and_remedy(invoke, points):
-    """Publication notes explain the committed settings, packaging, scanning, tests, hooks, tags, and uncertain retries."""
+    """Publication notes explain committed settings, package checks, retained history, tests, hooks, tags, and uncertain retries."""
     code, out, err = invoke("publish", "--help")
 
     assert code == 0 and err == ""
     notes = out.split("Notes:", 1)[1].split("Examples:", 1)[0].lower()
     items = [" ".join(item.split()) for item in re.split(r"(?m)^  - ", notes)[1:]]
-    assert len(items) == 7
+    assert len(items) == 8
     assert any(all(point in item for point in points) for item in items)
 
 

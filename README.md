@@ -10,29 +10,42 @@ Use it, for example, to send a public snapshot of a private repository to GitHub
 
 You need Python 3.12 or later, Git, and [uv](https://docs.astral.sh/uv/). Run commands inside the source Git repository.
 
-Add noren as a development dependency of your Python project:
+Install noren as a tool, then run `noren` directly:
+
+```sh
+uv tool install noren
+noren --help
+```
+
+Alternatively, add noren as a development dependency of your Python project:
 
 ```sh
 uv add --dev noren
 uv run noren --help
 ```
 
-Alternatively, [uvx](https://docs.astral.sh/uv/guides/tools/) runs noren in an isolated environment without adding it to your project's dependencies:
+With this option, prefix each `noren ...` command below with `uv run`.
+
+You can also use [uvx](https://docs.astral.sh/uv/guides/tools/) to run noren in an isolated environment without adding it to your project's dependencies:
 
 ```sh
 uvx noren --help
 ```
 
-The examples below use `uv run noren`. If you chose uvx, replace that prefix with `uvx noren`. If noren is already available in your environment, you can use `noren` directly. `noren init` and `noren publish` work without interactive input.
+With uvx, prefix each `noren ...` command below with `uvx`.
 
-To check the installed version, run `uv run noren --version`. It prints the version derived from Git tags on one line and exits with 0; it also works outside a Git repository.
+The examples below run `noren` directly. `noren init` and `noren publish` work without interactive input.
+
+To check the installed version, run `noren --version`. It prints the version derived from Git tags on one line and exits with 0; it also works outside a Git repository.
+
+To upgrade noren installed as a tool, run `uv tool upgrade noren`. To install a specific version, use `uv tool install noren==X.Y.Z`, replacing `X.Y.Z` with the version you need. Upgrades respect any version constraint set during installation.
 
 ## Initial setup
 
 The source repository must have an `origin` remote. Create a separate destination repository on GitHub and make sure your usual Git authentication can read it and push to it. noren uses `https://github.com/OWNER/REPO.git`, with your existing Git configuration.
 
 ```sh
-uv run noren init
+noren init
 ```
 
 `noren init` takes no arguments and creates `noren.yaml` and `noren-words.txt` at the source repository root, even when run from a subdirectory. It prints setup instructions, exits with 0 on success, and reports errors to stderr with a nonzero exit code. It refuses to overwrite either file and creates neither file if `origin` is missing.
@@ -148,12 +161,14 @@ If the packaging tool selects files with an allow list, such as hatchling's `onl
 
 Sending with noren before publishing to a package registry lets the forbidden-word check run before that irreversible publication.
 
+noren checks only the contents of the selected files. Files added to a package by the build backend, such as `PKG-INFO` and generated version files, are not checked. Check built packages with the same word list before publishing them to a package registry.
+
 ## Check before sending
 
 `noren publish` defaults to dry-run. Exactly one of `--tag` or `--commit` is required; providing both or neither stops the command. `--message` is also required, even for a check. For the first publication, when the destination has no `main` branch:
 
 ```sh
-uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
+noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
 ```
 
 For a tag containing only `README.md` and `src/app.py` among the included files, a successful first check prints:
@@ -184,25 +199,27 @@ Use `--initial` only when destination `main` is absent, for both dry-run and pus
 Add `--push` to the command you checked:
 
 ```sh
-uv run noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
+noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
 The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag is lightweight (not annotated) and points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only destination `main` and creates no tag.
+
+noren never rewrites destination history, so every published snapshot remains in it. Removing a file from a later selection does not remove it from old destination commits and tags. If you make an initially private destination repository public, all earlier snapshots become public too. Prepare the very first `--initial` publication as if it were already public.
 
 noren pushes with `--no-verify`, so Git hooks in the source repository, such as `pre-push`, do not run. Run any additional checks, such as secret scanning, before you send.
 
 For a later source tag, omit `--initial`:
 
 ```sh
-uv run noren publish --tag v1.1.0 --message "Release v1.1.0"
-uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push
+noren publish --tag v1.1.0 --message "Release v1.1.0"
+noren publish --tag v1.1.0 --message "Release v1.1.0" --push
 ```
 
 To send a README correction without a tag, replace the example ID below with your source commit ID. Check and send the same ID:
 
 ```sh
-uv run noren publish --commit a1b2c3d --message "Correct the README"
-uv run noren publish --commit a1b2c3d --message "Correct the README" --push
+noren publish --commit a1b2c3d --message "Correct the README"
+noren publish --commit a1b2c3d --message "Correct the README" --push
 ```
 
 Add `--initial` to both commands if destination `main` does not exist yet. With `--commit`, the result has `tag: null` and `source_commit` contains the full ID even when you supplied an abbreviation.
@@ -214,7 +231,7 @@ Choose a destination commit message appropriate for the files you are sending. n
 `noren publish` writes one YAML document to stdout on success and failure. Save this document and stderr, and check the exit code. To save the output of the later push above, use this form in place of that push command:
 
 ```sh
-uv run noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren-result.yaml 2> /tmp/noren-error.txt
+noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren-result.yaml 2> /tmp/noren-error.txt
 ```
 
 | Key | Meaning |
@@ -249,9 +266,9 @@ If `main` equals the printed destination `commit`, the update is present. If `ma
 ## Command help
 
 ```sh
-uv run noren --help
-uv run noren init --help
-uv run noren publish --help
+noren --help
+noren init --help
+noren publish --help
 ```
 
 Command help is in English. This README covers setup, checks, sending, and verification. Your project's version changes, builds, and publication to package registries belong to its own release instructions.
