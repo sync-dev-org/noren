@@ -8,6 +8,8 @@ site の原本、設定、build に使う依存の lock、Pages の workflow を
 
 noren 自身の文書は、公開用リポジトリの workflow が `uv sync --locked --no-install-project` で依存を入れ、`uv run --locked --no-sync mkdocs build --strict` で両言語を build し、Pages の成果物を公開します。同じ build を公開側の checkout からも実行でき、private の設定は必要ありません。[GitHub の Pages の workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) も参照してください。
 
+公開用のリポジトリでだけ動く workflow は、noren で送った後に初めて動きます。そのため、存在しない action の参照は、手元の build と test では見つかりません。送る前に、各 `uses:` の参照が action のリポジトリに実在することを、たとえば `git ls-remote https://github.com/<owner>/<action> <ref>` で確かめます。major の version の tag があると決めてかからないでください。正確な version の tag だけを出す action があり、`astral-sh/setup-uv@v9.0.0` は解決できても `astral-sh/setup-uv@v9` は解決できません。action を commit の SHA で固定する場合は、workflow を書く時に tag から SHA を引き、version を注記に残します。存在しない tag は、公開の時ではなくその時点で失敗します。
+
 ## 公開の文書に開発の内情を載せない
 
 公開する site と README は、公開側の利用者に向けて書きます。secret と認証の情報、開発環境の構成、host の名前、内部の path、開発用 tool の設定、private のリポジトリの名前、内部の手順を載せないでください。公開した物だけで再現できる使い方を説明します。

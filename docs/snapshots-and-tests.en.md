@@ -8,6 +8,8 @@ Keep the site's source files, configuration, build dependency lock, and Pages wo
 
 For noren's own documentation, the public repository's workflow installs dependencies with `uv sync --locked --no-install-project`, builds both languages with `uv run --locked --no-sync mkdocs build --strict`, and deploys the Pages artifact. The same build works from a public checkout; no private configuration is required. See [GitHub's custom Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
+A workflow restricted to the public repository first runs after noren sends it, so local builds and tests do not catch a broken action reference. Before sending, confirm that every `uses:` reference exists in the action's repository, for example with `git ls-remote https://github.com/<owner>/<action> <ref>`. Do not assume a major version tag exists: some actions publish only full version tags, so `astral-sh/setup-uv@v9` cannot be resolved while `astral-sh/setup-uv@v9.0.0` can. If you pin actions to full commit SHAs, resolve each SHA from its tag when you write the workflow and keep the version as a comment; a missing tag then fails at that point instead of during publication.
+
 ## Keep development details out of public documentation
 
 Write the public site and README for public users. Leave out secrets and authentication details, development environment configuration, host names, internal paths, development tool settings, private repository names, and internal procedures. Explain reproducible public usage instead.
