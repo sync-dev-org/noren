@@ -12,6 +12,7 @@ def initialize() -> None:
     templates = {
         "noren.yaml": (
             "destination: ''\n"
+            "branch: main\n"
             "include: ''\n"
             "exclude: |\n"
             "  noren.yaml\n"
@@ -36,7 +37,7 @@ def initialize() -> None:
         raise
     print(
         "Created noren.yaml and noren-words.txt.\n"
-        "Edit noren.yaml to set destination, include, exclude, and word-list.\n"
+        "Edit noren.yaml to set destination, branch, include, exclude, and word-list.\n"
         "Configure the required forbidden words in noren-words.txt before publishing.\n"
         "Commit these settings, then run noren publish with a tag or commit ID to check them."
     )

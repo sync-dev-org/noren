@@ -56,6 +56,7 @@ noren init
 
 ```yaml
 destination: OWNER/public-project
+branch: main
 include: |
   README.md
   LICENSE
@@ -80,6 +81,7 @@ author:
 | key | 書く内容 |
 | --- | --- |
 | `destination` | 送り先の GitHub の `OWNER/REPO`。URL ではありません。元のリポジトリ自身を指定すると止まります。 |
+| `branch` | 必須の送り先の branch 名。元のリポジトリにも、指定した commit を含む同名の local branch が必要です。`noren init` は `main` を入れます。 |
 | `include` | 送るファイルの一覧。`.gitignore` の書式のまま、複数行の文字列で書きます。 |
 | `exclude` | 送らないファイルの一覧。同じ書式で書きます。両方の一覧に当たるファイルは `exclude` が優先されます。 |
 | `word-list` | 禁止語の一覧のファイルの path。リポジトリの root からの相対 path で、リポジトリの中のファイルを指定します。 |
@@ -87,7 +89,9 @@ author:
 
 指定した元の commit の tree にあるファイルは、すべて `include` または `exclude` に当たる必要があります。どちらにも無いファイルがあると、コマンドは止まります。一覧の対象はその commit に記録されたファイルで、working directory の未追跡のファイルは対象にしません。各一覧は Git の `.gitignore` の規則に従い、`#` の comment、`!` の否定、`/` による root への固定、`**` を使えます。同じ一覧の中では後に書いた一致する規則が優先されます。親のディレクトリが除外されたままでは、子のファイルを否定の pattern だけで戻すことはできません。
 
-設定ファイルと禁止語の一覧のファイルは `exclude` に残し、リポジトリの他の追跡するファイルも一覧に加えてください。`word-list` を変えた場合は、そのファイルの除外も更新します。必須の四つの key はすべて必要です。`include` または `exclude` を空の文字列として設定することはできますが、どのファイルも分類する必要があります。
+設定ファイルと禁止語の一覧のファイルは `exclude` に残し、リポジトリの他の追跡するファイルも一覧に加えてください。`word-list` を変えた場合は、そのファイルの除外も更新します。必須の五つの key はすべて必要です。`include` または `exclude` を空の文字列として設定することはできますが、どのファイルも分類する必要があります。
+
+`branch` は空でない文字列で、Git の有効な branch 名である必要があります。元の local branch (`refs/heads/<name>`) が無いと止まり、remote-tracking branch では代用できません。送る commit は、その local branch の先端そのものか、その祖先である必要があります。複数の branch に共通する commit は、そのどの branch の名前でも照合を通ります。保守用の branch を作った時は、`branch` をその名前に直して commit します。手順全体は、[保守する系列の公開](https://sync-dev-org.github.io/noren/ja/publication-workflow/#publish-a-maintenance-series) を参照してください。
 
 `author` を省いた場合、noren は [GitHub CLI](https://cli.github.com/) の `gh` が使える時に、認証済み account の名前 (名前が空なら username) と `ID+USERNAME@users.noreply.github.com` を使います。account を取得できない場合は止まり、`author.name` と `author.email` の設定を求めます。`gh` は任意で、この既定の名義を作るためだけに使います。push の認証は Git の設定を使います。
 
@@ -133,7 +137,7 @@ README の訂正のように version を上げない変更は、`--commit` を�
 
 ## 送る前に確認する
 
-`noren publish` の既定の動作は dry-run です。`--tag` と `--commit` はどちらか一方が必須で、両方を指定した時とどちらも指定しない時は止まります。検査の場合も `--message` は必須です。最初の一回で、送り先に `main` branch が無い場合:
+`noren publish` の既定の動作は dry-run です。`--tag` と `--commit` はどちらか一方が必須で、両方を指定した時とどちらも指定しない時は止まります。検査の場合も `--message` は必須です。最初の一回で、設定した送り先の branch (この例では `main`) が無い場合:
 
 ```sh
 noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
@@ -145,22 +149,23 @@ noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
 tag: v1.0.0
 source_commit: 0123456789abcdef0123456789abcdef01234567
 destination: OWNER/public-project
+branch: main
 author:
   name: Release Bot
   email: release@example.invalid
 files:
 - README.md
 - src/app.py
-destination_main_before: null
+destination_branch_before: null
 commit: null
 pushed: false
 ```
 
-`source_commit`、`destination`、`author` の値と、`files` の各 path を確認してください。出力の `author.name` と `author.email` は、送り先の commit の author と committer の両方に使う値です。dry-run は送り先の commit を作らず、送り先の branch と tag を更新しません。ただし、送り先の参照を読むので、Git のアクセスが必要です。dry-run の成功は push の権限を保証しません。
+`source_commit`、`destination`、`branch`、`author` の値と、`files` の各 path を確認してください。出力の `author.name` と `author.email` は、送り先の commit の author と committer の両方に使う値です。dry-run は送り先の commit を作らず、送り先の branch と tag を更新しません。ただし、送り先の参照を読むので、Git のアクセスが必要です。dry-run の成功は push の権限を保証しません。
 
 検査が成功すると、コマンドは終了コード 0 で終わります。どちらの一覧にも無いファイルがある場合、送る中身に禁止語がある場合、必須の設定や語を含む禁止語の一覧が無い場合、送り先を読めない場合などは、0 以外で終わり、理由を標準エラー出力に出します。未分類のファイルのエラーは path を示し、禁止語のエラーはファイルと行を示します。送る一覧に当たる submodule は除外する必要があります。symlink はリンク先の文字列を検査し、symlink のまま送ります。
 
-tag 指定でも commit ID 指定でも、dry-run と push のどちらも、送り先に `main` が無い時だけ `--initial` を使います。`--initial` があって `main` が存在する場合と、`--initial` が無く `main` が存在しない場合は止まります。`--tag` を使う時は、送り先に指定した名前の tag がすでにある場合も止まります。
+送り先に branch が無い時は、`--initial` (親の無い commit) か `--base-tag <tag>` (送り先の既存の tag が指す commit を親にする) のどちらか一方を指定します。tag 指定でも commit ID 指定でも、dry-run と push に同じ option を使います。noren は送り先から基点の tag を取得し、commit を指す軽い tag と注釈付き tag のどちらも使えます。tag が無い場合と、commit 以外の object を指す場合は止まります。二つの option を同時に指定した場合と、送り先に branch が既にある時にどちらかを指定した場合も止まります。`--tag` を使う時は、送り先に指定した名前の tag がすでにある場合も止まります。
 
 ## 確認したファイルを送る
 
@@ -170,9 +175,9 @@ tag 指定でも commit ID 指定でも、dry-run と push のどちらも、送
 noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
-最初の一回は、親の無い commit を作ります。次からは、送り先の直前の `main` の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。`--tag` を使う時は、送り先の `main` と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。送り先の tag は軽い tag (注釈付きではない tag) で、元の tag が注釈付きでも、新しい commit を直接指します。`--commit` を使う時は、送り先の `main` だけを更新し、tag を付けません。
+最初の一回は、`--initial` なら親の無い commit、`--base-tag` なら送り先の tag の commit だけを親にした commit を作ります。次からは、設定した送り先の branch の直前の先端だけを親にした commit を一つ足します。その tree は選んだ元のファイルだけを持ち、選んだ一覧に無いファイルは新しい送り先の tree に残りません。`--tag` を使う時は、その branch と元の tag と同じ名前の tag を、force を使わず、一回の atomic push で一緒に更新します。送り先の tag は軽い tag (注釈付きではない tag) で、元の tag が注釈付きでも、新しい commit を直接指します。`--commit` を使う時は、その branch だけを更新し、tag を付けません。
 
-次の元の tag を送る時は `--initial` を外します。
+次の元の tag を送る時は `--initial` と `--base-tag` のどちらも付けません。
 
 ```sh
 noren publish --tag v1.1.0 --message "Release v1.1.0"
@@ -186,13 +191,13 @@ noren publish --commit a1b2c3d --message "Correct the README"
 noren publish --commit a1b2c3d --message "Correct the README" --push
 ```
 
-送り先の `main` がまだ無い場合は、両方のコマンドに `--initial` を加えます。`--commit` を使う時は、結果の `tag` は `null` になり、省略形の ID を指定した場合も `source_commit` は完全な ID になります。
+送り先の branch がまだ無い場合は、両方のコマンドに `--initial` か `--base-tag <tag>` を加えます。`--commit` を使う時は、結果の `tag` は `null` になり、省略形の ID を指定した場合も `source_commit` は完全な ID になります。
 
 送るファイルに合った送り先の commit message を指定してください。noren は元の commit message の代わりに、その message を使います。
 
 ## 送った結果を確かめる
 
-`noren publish` は成功時も失敗時も、一つの YAML 文書を標準出力に出します。その文書と標準エラー出力を保存し、終了コードを確認してください。上の次回の push の出力を保存する場合は、その push のコマンドの代わりに次の形を使います。
+`noren publish` は成功時も失敗時も、九つの key すべてを持つ一つの YAML 文書を標準出力に出します。その文書と標準エラー出力を保存し、終了コードを確認してください。上の次回の push の出力を保存する場合は、その push のコマンドの代わりに次の形を使います。
 
 ```sh
 noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren-result.yaml 2> /tmp/noren-error.txt
@@ -203,29 +208,30 @@ noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren-result
 | `tag` | 指定した元の tag の名前。`--commit` の時は `null`、どちらの指定も取得できない場合は空の文字列です。 |
 | `source_commit` | 送る file を取り出した元の commit の完全な ID。commit を決める前に止めた時は `null` です。 |
 | `destination` | 送り先の `OWNER/REPO`。取得できない場合は空の文字列です。 |
+| `branch` | 設定した送り先の branch の名前。設定を読む前で取得できない場合は `null` です。 |
 | `author` | 送り先の commit の author と committer の両方に使う、解決した `name` と `email`。名義を決める前に止めた時は `null` です。 |
 | `files` | 選んだファイルの path の YAML の list。空の場合もあります。この一覧だけでは検査や push の成功は分かりません。 |
-| `destination_main_before` | 送る前に読んだ送り先の `main` の commit の ID。`null` は送り先を読めて `main` が無かった場合、`''` は値を取得できなかった場合です。 |
+| `destination_branch_before` | 送る前に読んだ送り先の branch の commit の ID。`null` は送り先を読めてその branch が無かった場合、`''` は値を取得できなかった場合です。 |
 | `commit` | 作った送り先の commit の ID。dry-run の時と、commit を作る前に止めた時は `null` です。 |
-| `pushed` | Git が送り先の `main` と、`--tag` の時は指定した tag の更新を成功と報告した場合は `true`。dry-run の時と、コマンドが push の成功を確認できなかった場合は `false` です。 |
+| `pushed` | Git が送り先の branch と、`--tag` の時は指定した tag の更新を成功と報告した場合は `true`。dry-run の時と、コマンドが push の成功を確認できなかった場合は `false` です。 |
 
 push の成功時は終了コードが 0 で、`pushed: true` となり、`commit` は `null` 以外の値になります。この ID は送り先の commit の ID で、元の commit の ID ではありません。
 
-push が失敗した場合や結果が不明な場合に、`commit` が `null` 以外なら、その ID と `destination_main_before` を残してください。`pushed: false` だけでは、送り先が更新を受け取ったかは決まりません。結果にあるリポジトリと tag に例を置き換え、送り先の参照を読みます。
+push が失敗した場合や結果が不明な場合に、`commit` が `null` 以外なら、その ID と `destination_branch_before` を残してください。`pushed: false` だけでは、送り先が更新を受け取ったかは決まりません。結果にあるリポジトリ、branch (この例では `main`)、tag に例を置き換え、送り先の参照を読みます。
 
 ```sh
 git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main refs/tags/v1.1.0
 ```
 
-両方の参照が出力された `commit` の ID を示す場合、更新は送り先にあります。その後に `main` が進んだ場合も、tag が同じ ID なら送った時のファイルを特定できます。送り先の履歴を見て、その commit が現在の `main` の祖先かを確かめてください。`main` が `destination_main_before` のままで tag が無い場合、確認した時点では更新がありません。他の値になっている場合は、送り先の履歴を調べてから次の操作を決めてください。`ls-remote` の失敗では、push の成否は分かりません。終了コードだけで結果を決めたり、初回のコマンドをそのまま繰り返したりしないでください。すでに `main` や tag があれば、コマンドは止まります。
+両方の参照が出力された `commit` の ID を示す場合、更新は送り先にあります。その後に branch が進んだ場合も、tag が同じ ID なら送った時のファイルを特定できます。送り先の履歴を見て、その commit が branch の現在の先端の祖先かを確かめてください。branch が `destination_branch_before` のままで tag が無い場合、確認した時点では更新がありません。他の値になっている場合は、送り先の履歴を調べてから次の操作を決めてください。`ls-remote` の失敗では、push の成否は分かりません。終了コードだけで結果を決めたり、初回のコマンドをそのまま繰り返したりしないでください。送り先に既に branch や tag があれば、コマンドは止まります。
 
-`tag` が `null` の場合は、`main` だけを読みます。
+`tag` が `null` の場合は、branch (この例では `main`) だけを読みます。
 
 ```sh
 git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main
 ```
 
-`main` が出力された送り先の `commit` の ID と同じなら、更新は送り先にあります。その後に `main` が進んだ場合は、送り先の履歴を見て、その commit が現在の `main` の祖先かを確かめてください。`main` が `destination_main_before` のままなら、確認した時点では更新がありません。commit ID で送る時は送り先の tag による重複の防止が無いので、結果が不明な場合は成否を確かめてからコマンドを繰り返してください。
+branch が出力された送り先の `commit` の ID と同じなら、更新は送り先にあります。その後に branch が進んだ場合は、送り先の履歴を見て、その commit が現在の先端の祖先かを確かめてください。branch が `destination_branch_before` のままなら、確認した時点では更新がありません。commit ID で送る時は送り先の tag による重複の防止が無いので、結果が不明な場合は成否を確かめてからコマンドを繰り返してください。
 
 ## コマンドの help
 

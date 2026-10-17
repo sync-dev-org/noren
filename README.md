@@ -56,6 +56,7 @@ Edit the generated template. This example sends `README.md`, `LICENSE`, and file
 
 ```yaml
 destination: OWNER/public-project
+branch: main
 include: |
   README.md
   LICENSE
@@ -80,6 +81,7 @@ author:
 | Key | What to write |
 | --- | --- |
 | `destination` | The destination's GitHub `OWNER/REPO`, rather than a URL. The source repository itself is rejected. |
+| `branch` | Required destination branch name. The source must have a local branch with the same name containing the selected commit. `noren init` supplies `main`. |
 | `include` | Files to send, as a multiline string in `.gitignore` syntax. |
 | `exclude` | Files to leave out, in the same syntax. If both lists match a file, `exclude` wins. |
 | `word-list` | The forbidden-word file's path, relative to the repository root. The file must be inside the repository. |
@@ -87,7 +89,9 @@ author:
 
 Every file in the selected source commit's tree must match `include` or `exclude`; a file in neither list stops the command. These lists classify tracked files in that commit, not untracked files in the working directory. Each list follows Git's `.gitignore` rules, including `#` comments, `!` negation, `/`-anchored paths, and `**`. Within a list, later matching rules take precedence. A negated child pattern cannot bring back a file while its parent directory remains excluded.
 
-Keep the configuration and forbidden-word file in `exclude`, and add rules for any other tracked files in your repository. If you change `word-list`, update its exclusion too. All four required keys must be present; an explicitly empty `include` or `exclude` string is allowed, but every file still needs classification.
+Keep the configuration and forbidden-word file in `exclude`, and add rules for any other tracked files in your repository. If you change `word-list`, update its exclusion too. All five required keys must be present; an explicitly empty `include` or `exclude` string is allowed, but every file still needs classification.
+
+`branch` must be a nonempty string and a valid Git branch name. A missing local source branch (`refs/heads/<name>`) stops publication; a remote-tracking branch does not substitute for it. The selected source commit must be that local branch's tip or an ancestor of it. A commit shared by several branches can pass the check for any of those branches. When creating a maintenance branch, change `branch` to its name and commit the setting. See the [maintenance publication workflow](https://sync-dev-org.github.io/noren/publication-workflow/#publish-a-maintenance-series) for the full sequence.
 
 If you omit `author`, noren uses the authenticated [GitHub CLI](https://cli.github.com/) account when `gh` is available: its name (or username if the name is empty) and `ID+USERNAME@users.noreply.github.com`. If that account cannot be obtained, noren stops and asks you to configure `author.name` and `author.email`. `gh` is optional and only supplies this default identity; push authentication comes from Git.
 
@@ -133,7 +137,7 @@ If you correct settings or file contents after a failed check, commit the correc
 
 ## Check before sending
 
-`noren publish` defaults to dry-run. Exactly one of `--tag` or `--commit` is required; providing both or neither stops the command. `--message` is also required, even for a check. For the first publication, when the destination has no `main` branch:
+`noren publish` defaults to dry-run. Exactly one of `--tag` or `--commit` is required; providing both or neither stops the command. `--message` is also required, even for a check. For the first publication, when the configured destination branch (`main` in this example) is absent:
 
 ```sh
 noren publish --tag v1.0.0 --message "Release v1.0.0" --initial
@@ -145,22 +149,23 @@ For a tag containing only `README.md` and `src/app.py` among the included files,
 tag: v1.0.0
 source_commit: 0123456789abcdef0123456789abcdef01234567
 destination: OWNER/public-project
+branch: main
 author:
   name: Release Bot
   email: release@example.invalid
 files:
 - README.md
 - src/app.py
-destination_main_before: null
+destination_branch_before: null
 commit: null
 pushed: false
 ```
 
-Check `source_commit`, `destination`, `author`, and every path in `files`. The printed `author.name` and `author.email` will be used for both the destination commit's author and committer. Dry-run creates no destination commit and updates no destination branches or tags, but it reads the destination's references, so Git access is needed. A successful dry-run does not guarantee permission to push.
+Check `source_commit`, `destination`, `branch`, `author`, and every path in `files`. The printed `author.name` and `author.email` will be used for both the destination commit's author and committer. Dry-run creates no destination commit and updates no destination branches or tags, but it reads the destination's references, so Git access is needed. A successful dry-run does not guarantee permission to push.
 
 The command exits with 0 if the check succeeds. It exits with a nonzero code and writes the reason to stderr if, for example, a file is in neither list, selected contents contain a forbidden word, a required setting or a nonempty word list is missing, or the destination cannot be read. Unclassified-file errors list paths; forbidden-word errors identify the file and line. Selected submodules must be excluded; symlinks are inspected using their link target text and sent as symlinks.
 
-Use `--initial` only when destination `main` is absent, for both dry-run and push, with either source selector. noren stops if `--initial` is given and `main` already exists, or if `--initial` is omitted and `main` does not exist. With `--tag`, an existing destination tag of the requested name also stops publication.
+When the destination branch is absent, use exactly one of `--initial` (a commit with no parent) or `--base-tag <tag>` (a commit whose parent is the commit identified by an existing destination tag). Use the same option for dry-run and push, with either source selector. noren fetches the base tag from the destination and accepts lightweight or annotated tags pointing to commits; a missing tag or a tag pointing to a different kind of object stops publication. Both options are rejected together, and either option is rejected when the destination branch already exists. With `--tag`, an existing destination tag of the requested name also stops publication.
 
 ## Send the checked files
 
@@ -170,9 +175,9 @@ Add `--push` to the command you checked:
 noren publish --tag v1.0.0 --message "Release v1.0.0" --initial --push
 ```
 
-The first publication creates a commit with no parent. Each later publication adds one commit whose only parent is the destination's previous `main` tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates destination `main` and a tag with the source tag's name together in one atomic push, without force. The destination tag is lightweight (not annotated) and points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only destination `main` and creates no tag.
+With `--initial`, the first publication creates a commit with no parent; with `--base-tag`, its only parent is the destination tag's commit. Each later publication adds one commit whose only parent is the configured destination branch's previous tip. Its tree contains exactly the selected source files; files absent from the selection are absent from the new destination tree. With `--tag`, noren updates that branch and a tag with the source tag's name together in one atomic push, without force. The destination tag is lightweight (not annotated) and points directly to the new commit, even if the source tag is annotated. With `--commit`, noren updates only that branch and creates no tag.
 
-For a later source tag, omit `--initial`:
+For a later source tag, omit both `--initial` and `--base-tag`:
 
 ```sh
 noren publish --tag v1.1.0 --message "Release v1.1.0"
@@ -186,13 +191,13 @@ noren publish --commit a1b2c3d --message "Correct the README"
 noren publish --commit a1b2c3d --message "Correct the README" --push
 ```
 
-Add `--initial` to both commands if destination `main` does not exist yet. With `--commit`, the result has `tag: null` and `source_commit` contains the full ID even when you supplied an abbreviation.
+Add `--initial` or `--base-tag <tag>` to both commands if the destination branch does not exist yet. With `--commit`, the result has `tag: null` and `source_commit` contains the full ID even when you supplied an abbreviation.
 
 Choose a destination commit message appropriate for the files you are sending. noren uses that message instead of the source commit messages.
 
 ## Verify the result
 
-`noren publish` writes one YAML document to stdout on success and failure. Save this document and stderr, and check the exit code. To save the output of the later push above, use this form in place of that push command:
+`noren publish` writes one YAML document with all nine keys to stdout on success and failure. Save this document and stderr, and check the exit code. To save the output of the later push above, use this form in place of that push command:
 
 ```sh
 noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren-result.yaml 2> /tmp/noren-error.txt
@@ -203,29 +208,30 @@ noren publish --tag v1.1.0 --message "Release v1.1.0" --push > /tmp/noren-result
 | `tag` | The requested source tag name; `null` with `--commit`, or an empty string if no selector is available. |
 | `source_commit` | The full ID of the source commit read for publication; `null` if the command stopped before resolving it. |
 | `destination` | The destination `OWNER/REPO`; an empty string if unavailable. |
+| `branch` | The configured destination branch name; `null` if unavailable before reading the settings. |
 | `author` | The resolved `name` and `email` used for both the destination commit's author and committer; `null` if the command stopped before resolving the identity. |
 | `files` | The selected file paths as a YAML list, possibly empty. This list alone does not indicate a successful check or push. |
-| `destination_main_before` | The destination's `main` commit ID read before sending. `null` means the destination was read and `main` was absent; `''` means that value could not be obtained. |
+| `destination_branch_before` | The destination branch's commit ID read before sending. `null` means the destination was read and that branch was absent; `''` means that value could not be obtained. |
 | `commit` | The created destination commit ID. `null` for dry-run or a failure before creating a commit. |
-| `pushed` | `true` when Git reported that destination `main` and, with `--tag`, the requested tag were updated; `false` for dry-run or when the command could not confirm a successful push. |
+| `pushed` | `true` when Git reported that the destination branch and, with `--tag`, the requested tag were updated; `false` for dry-run or when the command could not confirm a successful push. |
 
 A successful push exits with 0 and has `pushed: true` and a non-null `commit`. The ID is the destination commit's ID, not the source commit's ID.
 
-If a push fails or its result is uncertain and `commit` is non-null, keep that ID and `destination_main_before`. `pushed: false` by itself cannot establish whether the remote received the update. Read the destination references, replacing the example repository and tag with those in your result:
+If a push fails or its result is uncertain and `commit` is non-null, keep that ID and `destination_branch_before`. `pushed: false` by itself cannot establish whether the remote received the update. Read the destination references, replacing the example repository, branch (`main` here), and tag with those in your result:
 
 ```sh
 git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main refs/tags/v1.1.0
 ```
 
-If both references show the printed `commit` ID, the update is present. If `main` has advanced since then, a matching tag still identifies the published snapshot; check the destination history to confirm that commit is an ancestor of the current `main`. If `main` still equals `destination_main_before` and the tag is absent, the update is not present at the time of the check. If the references differ otherwise, inspect the destination history before deciding what to do. A failed `ls-remote` does not establish whether the push succeeded. Do not infer the result from the exit code alone or blindly repeat the initial command: existing `main` or an existing tag will stop it.
+If both references show the printed `commit` ID, the update is present. If the branch has advanced since then, a matching tag still identifies the published snapshot; check the destination history to confirm that commit is an ancestor of the branch's current tip. If the branch still equals `destination_branch_before` and the tag is absent, the update is not present at the time of the check. If the references differ otherwise, inspect the destination history before deciding what to do. A failed `ls-remote` does not establish whether the push succeeded. Do not infer the result from the exit code alone or blindly repeat the initial command: an existing destination branch or an existing tag will stop it.
 
-When `tag` is `null`, read only `main`:
+When `tag` is `null`, read only the branch (`main` in this example):
 
 ```sh
 git ls-remote --refs https://github.com/OWNER/public-project.git refs/heads/main
 ```
 
-If `main` equals the printed destination `commit`, the update is present. If `main` has advanced, inspect the destination history to confirm that commit is an ancestor of the current `main`. If `main` still equals `destination_main_before`, the update is not present at the time of the check. Resolve an uncertain result before repeating the command; commit publication has no destination tag to prevent sending the same snapshot again.
+If the branch equals the printed destination `commit`, the update is present. If the branch has advanced, inspect the destination history to confirm that commit is an ancestor of its current tip. If the branch still equals `destination_branch_before`, the update is not present at the time of the check. Resolve an uncertain result before repeating the command; commit publication has no destination tag to prevent sending the same snapshot again.
 
 ## Command help
 

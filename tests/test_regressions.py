@@ -16,7 +16,7 @@ def test_parse_failures_preserve_known_tag_and_always_print_one_yaml_result(repo
     data = result(out)
     assert data["tag"] == "v1"
     assert data["destination"] == "" and data["files"] == []
-    assert data["destination_main_before"] == ""
+    assert data["destination_branch_before"] == ""
     assert data["commit"] is None and data["pushed"] is False
     assert repos.refs() == b""
 
@@ -89,6 +89,6 @@ def test_unobserved_main_is_empty_string_rather_than_claiming_main_is_absent(rep
     before = repos.refs()
     code, failed, err = publish(invoke, result, initial=False)
     assert code != 0 and err
-    assert failed["destination_main_before"] == ""
+    assert failed["destination_branch_before"] == ""
     assert failed["commit"] is None and failed["pushed"] is False
     assert repos.refs() == before

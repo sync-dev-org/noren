@@ -22,11 +22,13 @@ Root-anchored directory rules, such as `/src/`, `/tests/`, and `/docs/`, let fil
 
 Keep the original source URL and repository name written by `noren init` in the word list. Add private dependency, application, package, and host identifiers. The word list has no comment syntax: a nonblank line beginning with `#` is still a forbidden phrase.
 
-Commit corrections before choosing a tag or commit ID. An older tag does not see new settings. For the initial snapshot, use `--initial` for both dry-run and push only if destination `main` is absent. Review `destination` rather than assuming a configured name is the intended public repository.
+Commit corrections before choosing a tag or commit ID. An older tag does not see new settings. The required `branch` key names both the destination branch and a local source branch that must contain the selected commit; remote-tracking branches cannot substitute for it. `noren init` supplies `branch: main`, but existing configurations must also contain that key. Review both `destination` and `branch` rather than assuming the configured names are the intended publication target.
+
+If the destination branch is absent, use either `--initial` for a parentless commit or `--base-tag <tag>` for a commit based on an existing destination tag. Use the same option in dry-run and push. Both options together, either option on an existing branch, a missing base tag, or a base tag pointing to a non-commit object stop publication. See the [maintenance workflow](publication-workflow.md#publish-a-maintenance-series) for branching from an existing public release.
 
 ## Compare dry-run files with a destination snapshot
 
-Save the successful dry-run YAML, then compare its `files` with a checkout of destination `main`. For example, replace `../public-checkout` with that checkout:
+Save the successful dry-run YAML, then compare its `files` with a checkout of the configured destination branch. For example, replace `../public-checkout` with that checkout, and replace `main` with the output's `branch`:
 
 ```sh
 noren publish --commit a1b2c3d --message "Review snapshot" > /tmp/noren-check.yaml
@@ -49,7 +51,7 @@ print("Removed:", sorted(previous - selected))
 PY
 ```
 
-Inspect every change. Fetching first avoids comparing with a stale local `main`. For the first snapshot, compare with an empty file set instead. After sending, the tree of the reported destination commit should contain exactly the selected paths; read the destination history if `main` has advanced. File-set equality does not check contents or erase older snapshots.
+Inspect every change. Fetching first avoids comparing with a stale local branch. For a first snapshot with `--initial`, compare with an empty file set; with `--base-tag`, compare with the destination tag's tree. After sending, the tree of the reported destination commit should contain exactly the selected paths; read the destination history if the branch has advanced. File-set equality does not check contents or erase older snapshots.
 
 ## Test configuration without importing noren internals
 

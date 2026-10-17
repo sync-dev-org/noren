@@ -52,9 +52,9 @@ def test_commit_check_and_push_use_the_chosen_snapshot_and_only_update_main(repo
     assert code == 0 and err == ""
     checked = result(out)
     assert checked == {
-        "tag": None, "source_commit": snapshot, "destination": "example/public",
+        "tag": None, "source_commit": snapshot, "destination": "example/public", "branch": "main",
         "author": {"name": "Release Bot", "email": "release@example.invalid"},
-        "files": ["public/readme.txt"], "destination_main_before": before,
+        "files": ["public/readme.txt"], "destination_branch_before": before,
         "commit": None, "pushed": False,
     }
     assert repos.refs() == destination_refs
@@ -162,7 +162,7 @@ def test_commit_publication_rejects_an_initial_flag_that_disagrees_with_main(rep
     code, out, err = invoke("publish", "--commit", snapshot, "--message", "Update", *flags, "--push")
     assert code != 0 and "--initial" in err
     data = result(out)
-    assert data["source_commit"] == snapshot and data["destination_main_before"] == before
+    assert data["source_commit"] == snapshot and data["destination_branch_before"] == before
     assert data["commit"] is None and data["pushed"] is False
     assert repos.refs() == refs
 
@@ -187,7 +187,7 @@ def test_commit_word_list_stops_forbidden_content_despite_later_safe_settings(re
 @pytest.mark.req("SP-NOREN-033")
 @pytest.mark.parametrize("extra", [[], ["--message"], ["--unexpected"]])
 def test_commit_option_failures_print_a_complete_unresolved_result(repos, invoke, result, extra):
-    """Missing messages and invalid options report all eight result fields with an unresolved source commit and author."""
+    """Missing messages and invalid options report all nine result fields with an unresolved source commit and author."""
     snapshot = repos.commit()
     code, out, err = invoke("publish", "--commit", snapshot, *extra)
     assert code != 0 and err
@@ -203,7 +203,7 @@ def test_commit_option_failures_print_a_complete_unresolved_result(repos, invoke
 @pytest.mark.req("SP-NOREN-030")
 @pytest.mark.req("SP-NOREN-033")
 def test_publish_help_explains_commit_selection_examples_and_result_fields(invoke):
-    """English publication help describes the commit selector, shows its use, and lists the eight output fields."""
+    """English publication help describes the commit selector, shows its use, and lists the nine output fields."""
     code, out, err = invoke("publish", "--help")
     assert code == 0 and err == ""
     examples = out.split("Examples:", 1)[1].split("Related:", 1)[0]
@@ -211,7 +211,7 @@ def test_publish_help_explains_commit_selection_examples_and_result_fields(invok
     assert "--commit" in examples and "--commit ID" in options
     assert out.index("Examples:") < out.index("Related:") < out.index("Options:")
     behavior = out.split("Notes:", 1)[0]
-    for field in ("tag", "source_commit", "destination", "author", "files", "destination_main_before", "commit", "pushed"):
+    for field in ("tag", "source_commit", "destination", "branch", "author", "files", "destination_branch_before", "commit", "pushed"):
         assert field in behavior
     for detail in ("name", "email", "null", "unresolved"):
         assert detail in behavior

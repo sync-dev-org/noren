@@ -18,10 +18,10 @@ def test_default_dry_run_reports_files_without_changing_either_repository(repos,
     assert code == 0 and err == ""
     assert result(out) == {
         "tag": "v1", "source_commit": source_commit,
-        "destination": "example/public",
+        "destination": "example/public", "branch": "main",
         "author": {"name": "Release Bot", "email": "release@example.invalid"},
         "files": ["public/readme.txt"],
-        "destination_main_before": None, "commit": None, "pushed": False,
+        "destination_branch_before": None, "commit": None, "pushed": False,
     }
     assert repos.refs() == b""
     assert repos.git("rev-parse", "HEAD").stdout.decode().strip() == source_commit
@@ -74,9 +74,10 @@ def test_forbidden_words_stop_after_normalization_and_invalid_utf8(repos, invoke
 @pytest.mark.req("SP-NOREN-007")
 @pytest.mark.req("SP-NOREN-008")
 @pytest.mark.req("SP-NOREN-027")
-@pytest.mark.parametrize("missing", ["destination", "include", "exclude", "word-list"])
+@pytest.mark.req("SP-NOREN-042")
+@pytest.mark.parametrize("missing", ["destination", "branch", "include", "exclude", "word-list"])
 def test_missing_required_setting_stops_before_sending(repos, invoke, result, missing):
-    """Each of the four required settings must be present before files can be sent."""
+    """Each of the five required settings must be present before files can be sent."""
     settings = repos.configure()
     del settings[missing]
     repos.write("noren.yaml", yaml.safe_dump(settings))
@@ -223,9 +224,9 @@ def test_destination_cannot_be_the_source_repository(repos, invoke, result, orig
 
 
 @pytest.mark.req("SP-NOREN-033")
-@pytest.mark.parametrize("configuration", [None, "broken: [", "- list", "destination: example/public\ninclude: [list]\nexclude: ''\nword-list: noren-words.txt\n"])
+@pytest.mark.parametrize("configuration", [None, "broken: [", "- list", "destination: example/public\nbranch: main\ninclude: [list]\nexclude: ''\nword-list: noren-words.txt\n"])
 def test_missing_invalid_or_wrongly_typed_config_stops_with_a_complete_result(repos, invoke, result, configuration):
-    """Invalid tagged settings stop cleanly and preserve the eight public output fields with an unresolved author."""
+    """Invalid tagged settings stop cleanly and preserve the nine public output fields with an unresolved author."""
     if configuration is None:
         (repos.source / "noren.yaml").unlink()
     else:

@@ -61,7 +61,8 @@ def parser() -> Parser:
         description=(
             "Create setup templates at the source repository root.\n\n"
             "Create noren.yaml and noren-words.txt using the origin URL and repository name.\n"
-            "Set destination, include, exclude, and word-list; configure forbidden words.\n"
+            "Set destination, branch, include, exclude, and word-list; configure forbidden words.\n"
+            "The template supplies branch: main; choose the same local source and destination branch.\n"
             "Existing templates are preserved. No arguments or interactive input are needed.\n"
             "Print setup instructions to stdout; exit 0 on success, nonzero on errors to stderr.\n\n"
             "Notes:\n"
@@ -80,21 +81,27 @@ def parser() -> Parser:
             "Specify exactly one of --tag or --commit, and supply --message even for dry-run.\n"
             "Read noren.yaml, the forbidden words, and all files from the selected source commit.\n"
             "Reject unclassified files and forbidden content. Exclude takes precedence over include.\n"
-            "Default to dry-run. With --push, extend destination main without force or source history.\n"
-            "With --tag, update main and the same tag together in one atomic push.\n"
-            "With --commit, update only main and create no tag; names such as HEAD are rejected.\n"
-            "Print one YAML document with tag, source_commit, destination, author, files,\n"
-            "destination_main_before, commit, and pushed, on success and failure.\n"
+            "Require branch in noren.yaml; the source local branch of that name must contain the commit.\n"
+            "Default to dry-run. With --push, extend the destination branch without force or source history.\n"
+            "With --tag, update the branch and the same tag together in one atomic push.\n"
+            "With --commit, update only the branch and create no tag; names such as HEAD are rejected.\n"
+            "For an absent destination branch, require --initial or --base-tag; reject both together.\n"
+            "Reject either option when the destination branch already exists.\n"
+            "Print one YAML document with tag, source_commit, destination, branch, author, files,\n"
+            "destination_branch_before, commit, and pushed, on success and failure.\n"
             "tag is null with --commit. source_commit is the full source commit ID, or null\n"
             "if unresolved. Dry-run has commit: null. pushed confirms all requested updates.\n"
             "author has name and email for the destination commit's author and committer,\n"
             "or null if unresolved.\n"
-            "destination_main_before is an empty string when unread and null when main is absent.\n"
+            "branch is null until read from settings.\n"
+            "destination_branch_before is an empty string when unread and null when the branch is absent.\n"
             "Exit 0 on success, nonzero on errors with reasons on stderr.\n\n"
             "Notes:\n"
             "  - Settings and the word list come from the selected source commit, not the working tree.\n"
             "    Commit corrections, then select a tag or commit containing them.\n"
-            "    Review destination, author, and files in dry-run before adding --push.\n"
+            "    Review destination, branch, author, and files in dry-run before adding --push.\n"
+            "  - When creating a maintenance branch, change branch in noren.yaml to its name\n"
+            "    and commit the change. A missing branch key stops publication.\n"
             "  - noren.yaml and the word list are committed to the source repository and may enter packages.\n"
             "    Build from the destination repository or exclude both files in your build backend.\n"
             "  - Send with noren before publishing to a package registry so forbidden-word checks\n"
@@ -111,23 +118,25 @@ def parser() -> Parser:
             "    Read those names from the excluded word-list file instead.\n"
             "  - Source Git hooks such as pre-push do not run; run additional checks before sending.\n"
             "  - Destination tags are lightweight and point directly to the destination commit.\n"
-            "  - --commit creates no tag. If a push result is uncertain, check destination main\n"
+            "  - --commit creates no tag. If a push result is uncertain, check the destination branch\n"
             "    before you retry.\n\n"
             "Examples:\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial\n"
             "  noren publish --tag v1.0.0 --message 'Release v1.0.0' --initial --push\n"
             "  noren publish --tag v1.1.0 --message 'Release v1.1.0' --push\n"
+            "  noren publish --tag v1.2.4 --message 'Maintenance release v1.2.4' --base-tag v1.2.3\n"
             "  noren publish --commit a1b2c3d --message 'Correct the README'\n"
             "  noren publish --commit a1b2c3d --message 'Correct the README' --push\n\n"
             "Related:\n  Run noren init first, then commit the settings and choose a tag or commit ID.\n"
-            "  After publishing, compare destination main and any requested tag with the printed commit ID."
+            "  After publishing, compare the destination branch and any requested tag with the printed commit ID."
         ),
     )
     publish.add_argument("--tag", metavar="NAME", help="Source tag to read and publish; choose exactly one of --tag or --commit.")
-    publish.add_argument("--commit", metavar="ID", help="Hexadecimal source commit ID, including a unique abbreviation; update main without a tag.")
+    publish.add_argument("--commit", metavar="ID", help="Hexadecimal source commit ID, including a unique abbreviation; update the branch without a tag.")
     publish.add_argument("--message", metavar="TEXT", help="Required destination commit message, including for dry-run.")
-    publish.add_argument("--push", action="store_true", help="Actually update destination main and any requested tag; default is dry-run.")
-    publish.add_argument("--initial", action="store_true", help="Explicit first publication: require main to be absent and create a root commit.")
+    publish.add_argument("--push", action="store_true", help="Actually update the destination branch and any requested tag; default is dry-run.")
+    publish.add_argument("--initial", action="store_true", help="Require the destination branch to be absent and create a root commit; cannot combine with --base-tag.")
+    publish.add_argument("--base-tag", metavar="TAG", help="Use an existing destination tag's commit as parent when the branch is absent; cannot combine with --initial.")
     command.publish_parser = publish
     return command
 
@@ -135,8 +144,8 @@ def parser() -> Parser:
 def main(argv=None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     output = {
-        "tag": "", "source_commit": None, "destination": "", "author": None, "files": [],
-        "destination_main_before": "", "commit": None, "pushed": False,
+        "tag": "", "source_commit": None, "destination": "", "branch": None, "author": None, "files": [],
+        "destination_branch_before": "", "commit": None, "pushed": False,
     }
     publishing = bool(arguments and arguments[0] == "publish")
     try:

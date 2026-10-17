@@ -54,7 +54,7 @@ def test_help_points_to_public_documentation_for_detailed_guidance(invoke, comma
     ("tests", "private names", "forbidden", "word-list file"),
     ("source", "hooks", "pre-push", "checks", "before"),
     ("destination", "lightweight", "tags", "commit"),
-    ("--commit", "no tag", "uncertain", "destination main", "before", "retry"),
+    ("--commit", "no tag", "uncertain", "destination branch", "before", "retry"),
 ])
 def test_publish_notes_explain_each_publication_pitfall_and_remedy(invoke, points):
     """Publication notes explain package checks, cached registry copies, retained history, and other publication pitfalls."""

@@ -30,6 +30,7 @@ class Repositories:
     def configure(self, **changes):
         settings = {
             "destination": "example/public",
+            "branch": "main",
             "include": "public/**\n",
             "exclude": "noren.yaml\nnoren-words.txt\nprivate/**\n",
             "word-list": "noren-words.txt",
@@ -123,17 +124,18 @@ def result():
         assert len(documents) == 1
         data = documents[0]
         assert set(data) == {
-            "tag", "source_commit", "destination", "author", "files", "destination_main_before", "commit", "pushed",
+            "tag", "source_commit", "destination", "branch", "author", "files", "destination_branch_before", "commit", "pushed",
         }
         assert data["tag"] is None or isinstance(data["tag"], str)
         assert data["source_commit"] is None or isinstance(data["source_commit"], str)
         assert isinstance(data["destination"], str)
+        assert data["branch"] is None or isinstance(data["branch"], str)
         if data["author"] is not None:
             assert set(data["author"]) == {"name", "email"}
             assert all(isinstance(value, str) and value for value in data["author"].values())
         assert isinstance(data["files"], list)
         assert all(isinstance(path, str) for path in data["files"])
-        assert data["destination_main_before"] is None or isinstance(data["destination_main_before"], str)
+        assert data["destination_branch_before"] is None or isinstance(data["destination_branch_before"], str)
         assert data["commit"] is None or isinstance(data["commit"], str)
         assert isinstance(data["pushed"], bool)
         return data

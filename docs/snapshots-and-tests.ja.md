@@ -22,11 +22,13 @@ noren 自身の文書は、公開用リポジトリの workflow が `uv sync --l
 
 `noren init` が書いた元の URL とリポジトリの名前は、禁止語の一覧に残します。private の依存、application、package、host の識別子も加えます。一覧には comment の書式がありません。`#` で始まる行も、空白でなければ禁止する文です。
 
-tag と commit ID を選ぶ前に修正を commit します。古い tag は新しい設定を読みません。初回の snapshot では、送り先に `main` が無い時だけ、dry-run と push の両方に `--initial` を付けます。設定した名前だけを信用せず、`destination` が予定の公開先かを確かめてください。
+tag と commit ID を選ぶ前に修正を commit します。古い tag は新しい設定を読みません。必須の key `branch` は送り先の branch と、送る commit を含む元の local branch の両方を指定し、remote-tracking branch では代用できません。`noren init` は `branch: main` を入れますが、既存の設定にもこの key が必要です。設定した名前だけを信用せず、`destination` と `branch` が予定の公開先かを確かめてください。
+
+送り先に branch が無い場合は、親無しの commit にする `--initial` か、送り先の既存の tag を基点にする `--base-tag <tag>` のどちらかを使い、dry-run と push に同じ option を付けます。二つを同時に指定した場合、既に branch がある時にどちらかを付けた場合、基点の tag が無い場合、その tag が commit 以外の object を指す場合は止まります。既存の公開済み release から分ける例は、[保守する系列の公開](publication-workflow.md#publish-a-maintenance-series) を参照してください。
 
 ## dry-run のファイルと送り先の snapshot を比較する
 
-成功した dry-run の YAML を保存し、`files` を送り先の `main` の checkout と比べます。`../public-checkout` をその checkout に置き換えた例:
+成功した dry-run の YAML を保存し、`files` を設定した送り先の branch の checkout と比べます。`../public-checkout` をその checkout に、`main` を出力の `branch` に置き換えた例:
 
 ```sh
 noren publish --commit a1b2c3d --message "Review snapshot" > /tmp/noren-check.yaml
@@ -49,7 +51,7 @@ print("Removed:", sorted(previous - selected))
 PY
 ```
 
-増減を一つずつ点検します。先に fetch することで、古い local の `main` との比較を避けられます。最初の snapshot は、空のファイル集合と比較してください。送った後は、出力された送り先の commit の tree が選んだ path だけを持つことを確かめます。`main` が進んだ場合は送り先の履歴を調べてください。ファイル集合の一致は、中身の検査や過去の snapshot の消去ではありません。
+増減を一つずつ点検します。先に fetch することで、古い local branch との比較を避けられます。最初の snapshot は、`--initial` なら空のファイル集合、`--base-tag` なら送り先の tag の tree と比較してください。送った後は、出力された送り先の commit の tree が選んだ path だけを持つことを確かめます。branch が進んだ場合は送り先の履歴を調べてください。ファイル集合の一致は、中身の検査や過去の snapshot の消去ではありません。
 
 ## noren の内部 module を import せずに設定を test する
 

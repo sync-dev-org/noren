@@ -21,7 +21,7 @@ def test_init_creates_templates_at_repository_root_without_prompting(repos, invo
 
     assert code == 0 and err == ""
     config = yaml.safe_load((repos.source / "noren.yaml").read_text())
-    assert set(config) == {"destination", "include", "exclude", "word-list"}
+    assert set(config) == {"destination", "branch", "include", "exclude", "word-list"}
     assert config["destination"] == ""
     assert config["include"] == ""
     assert config["word-list"] == "noren-words.txt"
@@ -29,7 +29,7 @@ def test_init_creates_templates_at_repository_root_without_prompting(repos, invo
     assert (repos.source / "noren-words.txt").read_text().splitlines() == [
         "git@github.com:example/private.git", "private",
     ]
-    for required in ("destination", "include", "exclude", "word-list", "forbidden"):
+    for required in ("destination", "branch", "include", "exclude", "word-list", "forbidden"):
         assert required in out
     assert not (nested / "noren.yaml").exists()
 

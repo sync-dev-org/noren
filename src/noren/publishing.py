@@ -26,13 +26,19 @@ def settings(repository, entries, output):
         raise NorenError("noren.yaml must be a YAML mapping.")
     if isinstance(config.get("destination"), str):
         output["destination"] = config["destination"]
-    for key in ("destination", "include", "exclude", "word-list"):
+    if isinstance(config.get("branch"), str):
+        output["branch"] = config["branch"]
+    for key in ("destination", "branch", "include", "exclude", "word-list"):
         if key not in config:
             raise NorenError(f"noren.yaml requires the {key} setting.")
         if not isinstance(config[key], str):
             raise NorenError(f"noren.yaml: {key} must be a string.")
     if not re.fullmatch(r"[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+", config["destination"]):
         raise NorenError("noren.yaml: destination must be a GitHub OWNER/REPO.")
+    try:
+        repository.git("check-ref-format", f"refs/heads/{config['branch']}")
+    except NorenError as error:
+        raise NorenError("noren.yaml: branch must be a valid nonempty Git branch name.") from error
     words_path = PurePosixPath(config["word-list"])
     if not config["word-list"] or words_path.is_absolute() or ".." in words_path.parts:
         raise NorenError("noren.yaml: word-list must name a file inside the repository.")
@@ -190,10 +196,10 @@ def author(repository, config):
     return name, email
 
 
-def send(repository, selected, blobs, identity, url, options, output):
+def send(repository, selected, blobs, identity, url, options, output, parent):
     # Use source git configuration for authentication and URL rewrites, while all
     # new objects and index changes live in a disposable directory. The created
-    # commit references only selected blobs and the destination's previous main.
+    # commit references only selected blobs and the chosen destination parent.
     with TemporaryDirectory(prefix="noren-") as temporary:
         directory = Path(temporary)
         objects = directory / "objects"
@@ -210,12 +216,18 @@ def send(repository, selected, blobs, identity, url, options, output):
         for role in ("AUTHOR", "COMMITTER"):
             environment[f"GIT_{role}_NAME"] = name
             environment[f"GIT_{role}_EMAIL"] = email
-        previous = output["destination_main_before"]
-        if previous is not None:
+        if parent is not None:
             repository.git(
                 "fetch", "--no-tags", "--no-write-fetch-head", "--no-auto-maintenance",
-                url, previous, env=environment,
+                url, parent, env=environment,
             )
+            if options.base_tag is not None:
+                try:
+                    parent = repository.git("rev-parse", "--verify", f"{parent}^{{commit}}", env=environment).decode().strip()
+                except NorenError as error:
+                    raise NorenError(f"Destination base tag {options.base_tag} does not point to a commit.") from error
+        if not options.push:
+            return
         repository.git("read-tree", "--empty", env=environment)
         index_records = []
         for entry in selected:
@@ -223,12 +235,12 @@ def send(repository, selected, blobs, identity, url, options, output):
             index_records.append(f"{entry.mode} {oid}\t{entry.path}\0".encode("utf-8", errors="surrogateescape"))
         repository.git("update-index", "--add", "-z", "--index-info", input=b"".join(index_records), env=environment)
         tree = repository.git("write-tree", env=environment).decode().strip()
-        parents = ["-p", previous] if previous is not None else []
+        parents = ["-p", parent] if parent is not None else []
         output["commit"] = repository.git(
             "-c", "commit.gpgSign=false", "commit-tree", tree, *parents,
             input=(options.message if options.message.endswith("\n") else options.message + "\n").encode("utf-8"), env=environment,
         ).decode().strip()
-        refspecs = [f"{output['commit']}:refs/heads/main"]
+        refspecs = [f"{output['commit']}:refs/heads/{output['branch']}"]
         if options.tag is not None:
             refspecs.append(f"{output['commit']}:refs/tags/{options.tag}")
         repository.git(
@@ -263,11 +275,24 @@ def publish(options, output):
         raise NorenError("--tag requires an existing source tag name.")
     if not options.message or not options.message.strip():
         raise NorenError("--message is required. Example: --message 'Release v1.0.0'.")
+    if options.initial and options.base_tag is not None:
+        raise NorenError("--base-tag and --initial cannot be used together.")
     repository = Repository.discover()
     commit = source_commit(repository, options)
     output["source_commit"] = commit
     entries = repository.entries(commit)
     config = settings(repository, entries, output)
+    branch_ref = f"refs/heads/{config['branch']}"
+    try:
+        branch_tip = repository.git("show-ref", "--verify", "--hash", branch_ref).decode().strip()
+    except NorenError as error:
+        raise NorenError(f"Source local branch {config['branch']} is missing.") from error
+    try:
+        repository.git("merge-base", "--is-ancestor", commit, branch_tip)
+    except NorenError as error:
+        raise NorenError(f"Source commit {commit} is not contained in local branch {config['branch']}.") from error
+    if options.base_tag is not None:
+        repository.git("check-ref-format", f"refs/tags/{options.base_tag}")
     selected = choose_files(entries, config, output)
     blobs = inspect_content(repository, entries, selected, config)
     url = f"https://github.com/{config['destination']}.git"
@@ -275,18 +300,24 @@ def publish(options, output):
     identity = author(repository, config)
     output["author"] = {"name": identity[0], "email": identity[1]}
     remote_refs = {}
-    refs = ["refs/heads/main"]
+    refs = [branch_ref]
     if options.tag is not None:
         refs.append(f"refs/tags/{options.tag}")
+    if options.base_tag is not None:
+        refs.append(f"refs/tags/{options.base_tag}")
     for line in repository.git("ls-remote", "--refs", url, *refs).decode().splitlines():
         oid, ref = line.split("\t", 1)
         remote_refs[ref] = oid
-    output["destination_main_before"] = remote_refs.get("refs/heads/main")
-    if options.initial and output["destination_main_before"] is not None:
-        raise NorenError("--initial requires destination main to be absent.")
-    if not options.initial and output["destination_main_before"] is None:
-        raise NorenError("Destination main is absent; use --initial for the first publication.")
+    parent = output["destination_branch_before"] = remote_refs.get(branch_ref)
+    if (options.initial or options.base_tag is not None) and parent is not None:
+        raise NorenError(f"--initial and --base-tag require destination branch {config['branch']} to be absent.")
+    if not options.initial and options.base_tag is None and parent is None:
+        raise NorenError(f"Destination branch {config['branch']} is absent; use --initial or --base-tag for the first publication.")
     if options.tag is not None and f"refs/tags/{options.tag}" in remote_refs:
-        raise NorenError(f"Destination tag {options.tag} already exists; main and tag are unchanged.")
-    if options.push:
-        send(repository, selected, blobs, identity, url, options, output)
+        raise NorenError(f"Destination tag {options.tag} already exists; branch and tag are unchanged.")
+    if options.base_tag is not None:
+        parent = remote_refs.get(f"refs/tags/{options.base_tag}")
+        if parent is None:
+            raise NorenError(f"Destination base tag {options.base_tag} is missing.")
+    if options.push or options.base_tag is not None:
+        send(repository, selected, blobs, identity, url, options, output, parent)

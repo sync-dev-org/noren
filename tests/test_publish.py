@@ -47,7 +47,7 @@ def test_two_releases_only_extend_public_history_and_keep_source_untouched(repos
     assert code == 0 and err == "" and first["pushed"] is True
     first_commit = first["commit"]
     assert re.fullmatch(r"[0-9a-f]{40}", first_commit)
-    assert first["destination_main_before"] is None
+    assert first["destination_branch_before"] is None
     assert repos.git("rev-list", "--parents", "main", destination=True).stdout.decode().strip() == first_commit
     assert repos.git("ls-tree", "-r", "--name-only", "main", destination=True).stdout.decode().splitlines() == ["public/readme.txt"]
     assert repos.git("show", "main:public/readme.txt", destination=True).stdout == b"Public version one\n"
@@ -69,7 +69,7 @@ def test_two_releases_only_extend_public_history_and_keep_source_untouched(repos
     code, second, err = publish(invoke, result, tag="v2", initial=False)
     assert code == 0 and err == ""
     assert second["files"] == dry_run["files"]
-    assert second["destination_main_before"] == dry_run["destination_main_before"] == first_commit
+    assert second["destination_branch_before"] == dry_run["destination_branch_before"] == first_commit
     second_commit = second["commit"]
     assert repos.git("rev-list", "--parents", "main", destination=True).stdout.decode().splitlines() == [f"{second_commit} {first_commit}", first_commit]
     assert repos.git("rev-parse", "refs/tags/v1", destination=True).stdout.decode().strip() == first_commit
@@ -92,7 +92,7 @@ def test_initial_flag_must_agree_with_main_and_correct_flag_allows_publication(r
     refs_before = repos.refs()
     code, failed, err = publish(invoke, result, initial=main_exists)
     assert code != 0 and "--initial" in err
-    assert failed["destination_main_before"] == before
+    assert failed["destination_branch_before"] == before
     assert failed["commit"] is None and failed["pushed"] is False
     assert repos.refs() == refs_before
     code, sent, err = publish(invoke, result, initial=not main_exists)
@@ -165,7 +165,7 @@ def test_failed_push_reports_created_commit_and_previous_main(repos, invoke, res
     refs_before = repos.refs()
     code, failed, err = publish(invoke, result, initial=False)
     assert code != 0 and "Publication rejected" in err
-    assert failed["destination_main_before"] == before
+    assert failed["destination_branch_before"] == before
     assert failed["author"] == {"name": "Release Bot", "email": "release@example.invalid"}
     assert re.fullmatch(r"[0-9a-f]{40}", failed["commit"])
     assert failed["pushed"] is False
@@ -184,7 +184,7 @@ def test_rejected_tag_keeps_main_and_tag_unchanged_in_atomic_push(repos, invoke,
     refs_before = repos.refs()
     code, failed, err = publish(invoke, result, initial=False)
     assert code != 0 and "Tag rejected" in err
-    assert failed["destination_main_before"] == before
+    assert failed["destination_branch_before"] == before
     assert failed["commit"] is not None and failed["pushed"] is False
     assert repos.refs() == refs_before
 
