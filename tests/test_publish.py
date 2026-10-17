@@ -12,11 +12,12 @@ def publish(invoke, result, tag="v1", initial=True):
     return code, result(out), err
 
 
-def seed_destination(repos):
+def seed_destination(repos, parent=None):
     repos.git("config", "user.name", "Public Bot", destination=True)
     repos.git("config", "user.email", "public@example.invalid", destination=True)
     tree = repos.git("mktree", destination=True).stdout.decode().strip()
-    commit = repos.git("commit-tree", tree, "-m", "Existing public history", destination=True).stdout.decode().strip()
+    parents = ["-p", parent] if parent is not None else []
+    commit = repos.git("commit-tree", tree, *parents, "-m", "Existing public history", destination=True).stdout.decode().strip()
     repos.git("update-ref", "refs/heads/main", commit, destination=True)
     return commit
 

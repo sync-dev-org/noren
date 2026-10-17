@@ -28,6 +28,7 @@ def test_follow_tags_configuration_does_not_send_source_tag_annotations(repos, i
     parent = seed_destination(repos)
     repos.git("fetch", str(repos.destination), "main")
     repos.git("tag", "-a", "private-annotation", "-m", "PRIVATE source tag annotation", parent)
+    seed_destination(repos, parent=parent)
     repos.git("config", "push.followTags", "true")
     repos.commit("v1")
     code, sent, err = publish(invoke, result, initial=False)

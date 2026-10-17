@@ -162,6 +162,22 @@ def reject_source_destination(repository, config, url):
         raise NorenError("The destination is the source repository; no files will be sent.")
 
 
+def reject_source_history(repository, destination_objects):
+    for oid in destination_objects:
+        if oid is None:
+            continue
+        try:
+            commit = repository.git("rev-parse", "--verify", f"{oid}^{{commit}}").decode().strip()
+        except NorenError:
+            # Destination objects may be absent locally, or tags may name non-commits.
+            continue
+        if repository.git("for-each-ref", f"--contains={commit}", "--format=%(refname)", "refs/heads/", "refs/tags/").strip():
+            raise NorenError(
+                "The destination is the source repository; no files will be sent. "
+                "A destination commit is reachable from a local source branch or tag."
+            )
+
+
 def author(repository, config):
     if "author" in config:
         identity = config["author"]
@@ -304,11 +320,15 @@ def publish(options, output):
     if options.tag is not None:
         refs.append(f"refs/tags/{options.tag}")
     if options.base_tag is not None:
-        refs.append(f"refs/tags/{options.base_tag}")
-    for line in repository.git("ls-remote", "--refs", url, *refs).decode().splitlines():
+        # Read annotated-tag targets even when their tag objects are absent locally.
+        refs.extend((f"refs/tags/{options.base_tag}", f"refs/tags/{options.base_tag}^{{}}"))
+    for line in repository.git("ls-remote", url, *refs).decode().splitlines():
         oid, ref = line.split("\t", 1)
         remote_refs[ref] = oid
     parent = output["destination_branch_before"] = remote_refs.get(branch_ref)
+    base = remote_refs.get(f"refs/tags/{options.base_tag}") if options.base_tag is not None else None
+    base_commit = remote_refs.get(f"refs/tags/{options.base_tag}^{{}}", base) if options.base_tag is not None else None
+    reject_source_history(repository, (parent, base_commit))
     if (options.initial or options.base_tag is not None) and parent is not None:
         raise NorenError(f"--initial and --base-tag require destination branch {config['branch']} to be absent.")
     if not options.initial and options.base_tag is None and parent is None:
@@ -316,7 +336,7 @@ def publish(options, output):
     if options.tag is not None and f"refs/tags/{options.tag}" in remote_refs:
         raise NorenError(f"Destination tag {options.tag} already exists; branch and tag are unchanged.")
     if options.base_tag is not None:
-        parent = remote_refs.get(f"refs/tags/{options.base_tag}")
+        parent = base
         if parent is None:
             raise NorenError(f"Destination base tag {options.base_tag} is missing.")
     if options.push or options.base_tag is not None:

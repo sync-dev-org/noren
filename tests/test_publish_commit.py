@@ -20,6 +20,7 @@ def test_commit_check_and_push_use_the_chosen_snapshot_and_only_update_main(repo
         repos.git("tag", "existing", before, destination=True)
         repos.git("fetch", str(repos.destination), "main")
         repos.git("tag", "-a", "source-annotation", "-m", "PRIVATE annotation", before)
+        before = seed_destination(repos, parent=before)
     repos.git("config", "push.followTags", "true")
     snapshot = repos.commit()
     identifier = snapshot
