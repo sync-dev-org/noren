@@ -12,6 +12,7 @@ theme:
 
 nav:
   - Overview: index.md
+  - Operating essentials: operating-essentials.md
   - Publication workflow: publication-workflow.md
   - Package checks: package-checks.md
   - Snapshots and tests: snapshots-and-tests.md
@@ -33,6 +34,7 @@ plugins:
           site_description: noren を使う公開の流れ、落とし穴、TIPS
           nav_translations:
             Overview: 概要
+            Operating essentials: 運用の要点
             Publication workflow: 公開の流れ
             Package checks: package の検査
             Snapshots and tests: snapshot と test
